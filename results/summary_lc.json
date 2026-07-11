@@ -1,0 +1,24 @@
+{
+  "n_train": 175426,
+  "n_val": 162570,
+  "n_test": 283026,
+  "bad_rate_train": 0.12630396862494728,
+  "bad_rate_val": 0.13726394783785445,
+  "bad_rate_test": 0.14886264866125373,
+  "scorecard_features": [
+    "sub_grade",
+    "int_rate",
+    "grade",
+    "fico",
+    "annual_inc",
+    "revol_util",
+    "dti",
+    "inq_last_6mths",
+    "mort_acc",
+    "home_ownership",
+    "purpose"
+  ],
+  "spearman_importance_vs_iv": 0.5612648221343874,
+  "accept_all_profit_per_1000": 705170.8092189409,
+  "runtime_s": 992.1
+}

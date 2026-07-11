@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Data (large raw files are re-downloadable via data/download_lc.py)
+data/_kagglehub/
+data/*.csv
+data/*.csv.gz
+data/*.zip
+data/*.xls
+data/*.parquet
+
+# LaTeX build
+*.aux
+*.log
+*.out
+*.synctex.gz
+*.bbl
+*.blg
+
+# OS
+Thumbs.db
+.DS_Store
