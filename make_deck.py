@@ -230,7 +230,40 @@ notes(s, "Walk through the package structure on screen here. Emphasize: honest "
          "WoE scorecard baseline, shared design matrix, calibration fit only on "
          "the validation vintage, profit from actual loan cash flows.")
 
-# ---------------------------------------------------------------- 6: leaderboard
+# ---------------------------------------------------------------- 6: metrics
+s = slide()
+header(s, "Evaluation", "Three Questions, Each With Its Own Metrics")
+for i, (t1, t2) in enumerate([
+        ("Discrimination: AUC, KS",
+         "AUC: probability a random defaulter is ranked riskier than a random "
+         "good borrower. KS: maximum distance between the two score "
+         "distributions. Both ignore whether the PD values themselves are "
+         "right."),
+        ("Calibration: Brier, ECE, reliability",
+         "Among loans assigned PD near q, do a fraction q actually default? "
+         "Brier: mean squared error of the probability. ECE: average gap "
+         "between predicted PD and observed default rate over 10 bins."),
+        ("Decision quality: profit, with significance",
+         "Realized profit per 1,000 applicants across accept/reject cutoffs, "
+         "from actual cash flows. Significance throughout: DeLong test for "
+         "correlated AUCs, 1,000-resample bootstrap CIs.")]):
+    y = Inches(1.9) + i * Inches(1.55)
+    box(s, Inches(0.6), y, Inches(12.1), Inches(1.35), fill=LIGHT, round_=True)
+    text(s, Inches(0.95), y + Inches(0.16), Inches(3.5), Inches(1.05), t1,
+         size=16.5, color=NAVY, bold=True)
+    text(s, Inches(4.6), y + Inches(0.14), Inches(7.7), Inches(1.1), t2,
+         size=13.5, color=INK)
+text(s, Inches(0.6), Inches(6.7), Inches(12.1), Inches(0.5),
+     [[("Why three?  ", {"bold": True, "color": NAVY}),
+       ("A model can gain AUC while its probabilities become less "
+        "trustworthy; 'best model' is undefined until the question is fixed.",
+        {})]], size=15)
+notes(s, "Define the metrics before showing numbers: AUC and KS for ranking, "
+         "Brier and ECE for calibration, realized profit for decisions, with "
+         "DeLong and bootstrap significance everywhere. The point: the three "
+         "questions can rank models differently.")
+
+# ---------------------------------------------------------------- 7: leaderboard
 s = slide()
 header(s, "Results 1 of 4", "Discrimination: the Trees Win, the Neural Net Loses")
 rows = [
@@ -284,7 +317,7 @@ notes(s, "First results: XGBoost +0.85 AUC points over the scorecard, LightGBM "
          "close behind, both overwhelmingly significant by DeLong. The MLP "
          "actually loses to the scorecard. Explain why the gap is modest.")
 
-# ---------------------------------------------------------------- 7: calibration
+# ---------------------------------------------------------------- 8: calibration
 s = slide()
 header(s, "Results 2 of 4", "Calibration: Every Raw Model Under-Predicts the Future")
 s.shapes.add_picture("figures/fig_reliability.png", Inches(0.6), Inches(1.85),
@@ -306,7 +339,7 @@ notes(s, "Reliability diagrams: raw curves above the diagonal because of "
          "all bias. Scorecard is the best-calibrated model throughout; this is "
          "why regulators monitor rather than trust PD models.")
 
-# ---------------------------------------------------------------- 8: profit
+# ---------------------------------------------------------------- 9: profit
 s = slide()
 header(s, "Results 3 of 4", "Profit: the AUC Gap Becomes Money at the Cutoff")
 s.shapes.add_picture("figures/fig_profit.png", Inches(0.6), Inches(1.9),
@@ -324,7 +357,7 @@ notes(s, "Profit curves from actual cash flows. The whole battle happens in the 
          "zoomed panel: XGBoost's optimal policy makes 2.1% more than the "
          "scorecard's. Modest per applicant, linear in volume.")
 
-# ---------------------------------------------------------------- 9: interpret
+# ---------------------------------------------------------------- 10: interpret
 s = slide()
 header(s, "Results 4 of 4", "What Did the Models Learn? Mostly the Same Thing")
 s.shapes.add_picture("figures/fig_importance.png", Inches(0.6), Inches(1.9),
@@ -341,7 +374,7 @@ notes(s, "Feature importance vs information value: both models rely on the "
          "platform's risk pricing, so all four models largely re-rank loans "
          "Lending Club already ranked. The scorecard stays point-readable.")
 
-# ---------------------------------------------------------------- 10: robustness
+# ---------------------------------------------------------------- 11: robustness
 s = slide()
 header(s, "Robustness and limitations", "Same Ranking on an Independent Dataset")
 box(s, Inches(0.6), Inches(1.85), Inches(5.9), Inches(2.6), fill=LIGHT, round_=True)
@@ -372,7 +405,7 @@ notes(s, "Taiwan reproduces the ranking, so it is not a Lending Club artifact. "
          "Then the honest limitations: reject inference, simple cash-flow "
          "model, platform grades as features, single benign test vintage.")
 
-# ---------------------------------------------------------------- 11: wrap-up
+# ---------------------------------------------------------------- 12: wrap-up
 s = slide()
 box(s, 0, 0, SW, SH, fill=NAVY)
 text(s, Inches(0.8), Inches(0.55), Inches(11.7), Inches(0.35), "WRAP-UP",
