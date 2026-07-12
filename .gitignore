@@ -22,3 +22,8 @@ data/*.parquet
 # OS
 Thumbs.db
 .DS_Store
+
+# Deck build temporaries
+_tpl/
+_qa/
+title_filled.pdf
