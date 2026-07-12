@@ -1,0 +1,101 @@
+% Study memo (condensed version): rapid reference + quick-fire Q&A
+% for the T8 term project "Does Machine Learning Beat the Credit Scorecard?"
+% Compile with pdfLaTeX on Overleaf. No figures required.
+\documentclass[a4paper,10pt]{article}
+
+\usepackage[a4paper,top=1.9cm,bottom=1.9cm,left=1.9cm,right=1.9cm,columnsep=0.7cm]{geometry}
+\usepackage{newtxtext,newtxmath}
+\usepackage{amsmath,amssymb}
+\usepackage{xurl}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\newcommand{\term}[1]{\textbf{#1}:}
+
+\begin{document}
+\twocolumn[{
+\centering
+{\large\bfseries Study Memo (Condensed): Does Machine Learning Beat the Credit Scorecard?\par}
+\vspace{2mm}
+{\itshape François Schmitt (23035010523), Trimester 8 Term Project}\par
+\vspace{4mm}
+}]
+
+\section*{Concepts in one line each}
+
+\term{PD} probability a loan applicant defaults, estimated from origination-time information only.
+
+\term{Charged off / fully paid} the two resolved outcomes; loans still in flight are excluded so the target is fully observed.
+
+\term{Leakage} using post-origination fields (payments, recoveries); cured by a whitelist of 23 origination-time columns out of 151.
+
+\term{Right-censoring} unfinished loans have unknown outcomes; avoided by using only 36-month loans issued 2007--2015.
+
+\term{Out-of-time split} train $\le$2013, calibrate 2014, test 2015; reproduces deployment and keeps the default-rate drift (12.6 $\to$ 14.9\%).
+
+\term{WoE} per bin, $\ln[(g_j/g)/(b_j/b)]$; puts every feature on one evidence scale, handles missing values, keeps the model readable.
+
+\term{IV} $\sum_j (g_j/g-b_j/b)\mathrm{WoE}_j$; screening keeps features with IV $\ge 0.02$ (11 of 23 kept).
+
+\term{Scorecard} logistic regression on WoE features, rescaled so 600 points = 19:1 odds and +20 points doubles the odds.
+
+\term{Boosted trees} XGBoost / LightGBM, sequential shallow trees fit to loss gradients, early-stopped on validation AUC.
+
+\term{Shared design matrix} identical inputs for all challengers (median-impute + one-hot, fit on train), so gaps come from the learner.
+
+\term{AUC} probability a random defaulter outranks a random good borrower; ranking only. \textbf{KS}: max gap between score CDFs.
+
+\term{Calibration} among loans with $\hat p\approx q$, a fraction $q$ defaults. \textbf{Brier}: MSE of the probability. \textbf{ECE}: mean $|$predicted $-$ observed$|$ over 10 bins. \textbf{Reliability diagram}: the picture of it.
+
+\term{Platt / isotonic} monotone recalibration maps (logistic on the logit / step function), fit on the 2014 vintage, applied to 2015, same for every model; monotone maps leave AUC unchanged.
+
+\term{DeLong test} significance of an AUC difference when both models score the same test set (correlated AUCs).
+
+\term{Bootstrap CI} percentile intervals from 1{,}000 resamples of the test set.
+
+\term{Profit model} accept if $\hat p\le c$, sweep $c$; repaid loan earns $36\cdot$installment $-$ principal, charged-off loses $0.65\times$principal; report USD per 1{,}000 applicants; curve maximum = best operating point.
+
+\term{Reject inference} the unsolved problem that only accepted loans are observed; stated as a limitation.
+
+\section*{Results in five lines}
+
+XGBoost 0.6850 AUC vs scorecard 0.6767 ($+0.85$ pts, $p<10^{-54}$); LightGBM $+0.72$; MLP $-0.17$, significantly worse.
+
+All raw models under-predict PD (2015 defaulted more than training years); isotonic fixes most, not all.
+
+Scorecard stays best-calibrated (ECE 0.0175 vs 0.0214); trees keep the better Brier.
+
+Profit: accept-all \$705{,}171 per 1{,}000; scorecard best $+1.2\%$; XGBoost best $+3.3\%$ ($+\$14{,}700$ over scorecard, $+2.1\%$).
+
+Taiwan robustness reproduces the ranking ($+1.50$ pts, $p=2.8\times10^{-6}$). Verdict: a qualified yes, trees only.
+
+\section*{Quick-fire Q\&A}
+
+\textbf{Q. Why not judge by AUC alone?} A. AUC sees only ranking; provisioning needs the PD values right (calibration) and lending needs money made at a cutoff (profit). Raw trees had the best AUC and the worst ECE simultaneously.
+
+\textbf{Q. One concrete leaky feature?} A. Principal received to date: equals loan amount for repaid loans, so it encodes the answer.
+
+\textbf{Q. Why out-of-time, not cross-validation?} A. Deployment scores future applicants under a different economy; random splits share the regime across train and test, flattering flexible models and hiding drift.
+
+\textbf{Q. Why do banks still use scorecards?} A. Stable, auditable, point-readable, regulator-friendly; and here, best-calibrated with most of the trees' performance.
+
+\textbf{Q. Why fit calibrators on 2014?} A. Must be out-of-sample for the model and recent for the deployment; identical treatment keeps the comparison fair.
+
+\textbf{Q. Why is calibration still imperfect after isotonic?} A. The map is learned on 2014; 2015's higher default level was not yet visible. Monotone maps cannot anticipate the future, hence ongoing monitoring in practice.
+
+\textbf{Q. Tiny p-values: is the edge big?} A. No; 283k test loans make any real gap significant. Size is the point: $+0.85$ AUC pts, $+2.1\%$ profit.
+
+\textbf{Q. Why did the MLP lose?} A. Tabular data favours trees' and binning's inductive biases; the MLP adds flexibility the data cannot pay for, with 10$\times$ the seed variance.
+
+\textbf{Q. Why is accept-everyone profitable, and so what?} A. Interest income exceeds default losses; the model only adds value pruning the riskiest tail, so models separate only near the optimal cutoff.
+
+\textbf{Q. Isn't keeping grade/int\_rate circular?} A. It is the investor's information set; it compresses the gap (all models re-rank ranked loans) and is stated as a limitation. Raw bureau data would likely widen the ML edge.
+
+\textbf{Q. Biggest lesson?} A. Evaluation design beats modelling: the whitelist, the calendar split and the choice of criteria changed conclusions more than any hyperparameter; ``best model'' depends on the question.
+
+\vspace{2mm}
+\textit{Code and results: \url{https://github.com/iitgF/T8}. Full walkthrough: \texttt{memo\_standard.tex}.}
+
+\end{document}

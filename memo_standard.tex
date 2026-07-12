@@ -1,0 +1,158 @@
+% Study memo (standard version): concepts, methodologies and sample Q&A
+% for the T8 term project "Does Machine Learning Beat the Credit Scorecard?"
+% Compile with pdfLaTeX on Overleaf. No figures required.
+\documentclass[a4paper,11pt]{article}
+
+\usepackage[a4paper,top=2.4cm,bottom=2.4cm,left=2.4cm,right=2.4cm]{geometry}
+\usepackage{newtxtext,newtxmath}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xurl}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\term}[1]{\textbf{#1}}
+\newenvironment{qa}{\begin{description}[leftmargin=0pt,itemsep=6pt]}{\end{description}}
+\newcommand{\Q}[1]{\item[Q.] \textit{#1}}
+\newcommand{\A}{\item[A.]}
+
+\title{\bfseries Study Memo: Concepts and Methodologies\\
+\large Does Machine Learning Beat the Credit Scorecard? (Trimester 8 Term Project)}
+\author{François Schmitt (Roll Number: 23035010523)\\
+\ttfamily f.schmitt@op.iitg.ac.in}
+\date{Standard version}
+
+\begin{document}
+\maketitle
+
+\noindent This memo explains every concept and methodological choice in the project, in the order the pipeline uses them, and ends with sample questions and answers of the kind an examiner might ask. A two-page condensed version exists as \texttt{memo\_condensed.tex}.
+
+\section{The problem setting}
+
+\term{Probability of default (PD).} The probability that a loan applicant fails to repay. The model consumes only information available on the day of application and outputs $\hat p_i = \widehat{\Pr}(y_i=1\,|\,\mathbf{x}_i)$, where $y_i=1$ means the loan was eventually charged off.
+
+\term{Charged off.} The lender has written the loan off as a loss; together with ``Fully Paid'' it is a resolved outcome. Loans still being repaid are unresolved and are excluded from the study so the target is fully observed.
+
+\term{Loss given default (LGD) and exposure.} When a loan defaults the lender does not lose everything; LGD is the fraction of the exposure actually lost. The project fixes $\mathrm{LGD}=0.65$ of principal, a standard unsecured-lending assumption, and states it explicitly because the profit results depend on it.
+
+\term{Why PD models are regulated.} Under the Basel accords and IFRS~9, estimated PDs determine regulatory capital and loan-loss provisions. This is why banks require PD models to be accurate, stable and explainable, and why the logistic scorecard, which is all three, survives despite newer methods.
+
+\term{The research question.} The benchmarking literature says machine learning beats the scorecard but scores models almost exclusively by AUC. The project asks whether the advantage survives the two other criteria a lender needs: calibrated probabilities and profitable accept/reject decisions.
+
+\section{Data discipline}
+
+\term{Leakage.} Using information that would not have been available at prediction time. The raw Lending Club export has 151 columns, and most describe the loan's later life (payments received, recoveries, hardship flags); any of them trivially predicts the outcome. The project keeps an explicit whitelist of 23 origination-time fields. Leakage control is the single highest-leverage step: a leaked feature produces an impressive and meaningless AUC.
+
+\term{Right-censoring.} A loan whose term has not finished by the end of the data has an unknown outcome. Restricting to 36-month loans issued 2007--2015, when the data ends in 2018Q4, guarantees every loan matured, so no outcome is censored and no survivorship filter is needed.
+
+\term{Out-of-time (vintage) split.} Train on loans issued 2007--2013, fit calibrators on the 2014 vintage, test on the 2015 vintage. A random split would let the model see the future's economy in training and flatters flexible models; the calendar split reproduces how a deployed model actually meets data. The default rate rises across vintages (12.6\% train, 13.7\% validation, 14.9\% test); this drift is deliberately kept, because it is what a real model faces.
+
+\section{The scorecard baseline}
+
+\term{Weight of evidence (WoE).} For bin $j$ of a feature, with $g_j, b_j$ the goods and bads in the bin and $g, b$ their totals,
+\begin{equation}
+\mathrm{WoE}_j=\ln\!\frac{g_j/g}{b_j/b},
+\end{equation}
+positive where the bin is safer than average, negative where riskier. Counts are smoothed by 0.5 so empty cells never give infinite values. Numeric features are quantile-binned on training data with missing values as their own bin; categorical features pool rare levels.
+
+\term{Information value (IV).} $\mathrm{IV}=\sum_j (g_j/g-b_j/b)\,\mathrm{WoE}_j$ summarizes how separating a feature is. The project keeps features with $\mathrm{IV}\ge 0.02$; 11 of 23 survive, led by \texttt{sub\_grade}, \texttt{int\_rate}, \texttt{grade} and \texttt{fico}.
+
+\term{Scorecard.} A logistic regression on the WoE-transformed features gives the PD. The PD is then expressed as additive points via the points-to-double-odds scaling: with $\mathrm{PDO}=20$, base score 600 at 19:1 good:bad odds,
+\begin{equation}
+\text{score}=600-\frac{20}{\ln 2}\ln 19+\frac{20}{\ln 2}\,\ln\frac{1-\hat p}{\hat p},
+\end{equation}
+so 20 extra points double the odds of being good. The result is the regulated-bank workhorse: every input enters through a monotone-ish transform and the model is a readable sum of points.
+
+\section{The machine-learning challengers}
+
+\term{Gradient boosting (XGBoost, LightGBM).} An ensemble of shallow decision trees built sequentially, each tree fit to the gradient of the loss on the current predictions. Strong on tabular data because trees capture interactions and nonlinearities without feature engineering. Both are early-stopped on validation AUC (up to 2{,}000 trees, learning rate 0.05).
+
+\term{MLP.} A two-layer neural network (64 and 32 units, ReLU, Adam) on standardized inputs, included to test the ``deep learning for credit'' claim.
+
+\term{Shared design matrix.} All three challengers consume the identical matrix: median-imputed numerics plus one-hot categoricals, fit on training data only. This ensures performance differences come from the learner, not the preprocessing. Each ML model is retrained with five seeds and results are reported as mean and standard deviation; the trees vary by $\pm 0.0005$ AUC, the MLP by ten times more.
+
+\section{Evaluation criteria}
+
+\term{Discrimination: AUC and KS.} AUC is the probability that a randomly chosen defaulter receives a higher predicted PD than a randomly chosen good borrower; 0.5 is coin-flipping. KS is the maximum vertical distance between the score distributions of goods and bads. Both depend only on the ranking, so they are blind to whether the probabilities are numerically right.
+
+\term{Calibration.} A model is calibrated if, among loans assigned $\hat p\approx q$, a fraction $q$ actually defaults. Measured by the \term{Brier score} (mean squared error of the probability, $\frac1n\sum_i(\hat p_i-y_i)^2$, which rewards both calibration and discrimination), the \term{expected calibration error} (ECE: average absolute gap between mean predicted PD and observed default rate over 10 equal-frequency bins), and \term{reliability diagrams} (predicted PD versus observed rate per bin; a calibrated model lies on the diagonal).
+
+\term{Recalibration: Platt and isotonic.} Post-hoc monotone maps fit on held-out data. Platt scaling refits a one-variable logistic regression on the model's logit; isotonic regression fits a monotone step function. Both are fit on the 2014 vintage and applied to 2015 scores, identically for every model, mimicking a bank recalibrating a deployed model on its most recent observed cohort. Monotone maps do not change AUC (up to ties), which is why discrimination and calibration are separate axes.
+
+\term{Significance: DeLong and bootstrap.} Two models scored on the same test loans give correlated AUCs; DeLong's test accounts for that correlation when testing whether the AUC difference is real. Percentile bootstrap (1{,}000 resamples of the test set) gives confidence intervals for any paired metric difference. With 283{,}026 test loans, even small gaps are decisively significant, so the emphasis moves from ``is it real'' to ``how big is it''.
+
+\term{Profit model.} Accept applicant $i$ if $\hat p_i\le c$; sweep the cutoff $c$. Realized profit uses actual outcomes: a repaid 36-month loan earns its total interest, $36\cdot\text{installment}_i-\text{principal}_i$ (undiscounted), and a charged-off loan loses $0.65\times\text{principal}_i$. Profit is reported per 1{,}000 applicants; the curve's maximum is the model's best operating point. This prices exactly the trade-off a PD cutoff controls: foregone interest against principal losses.
+
+\section{Results and how to read them}
+
+\begin{itemize}[itemsep=2pt]
+\item \term{Discrimination:} XGBoost 0.6850 AUC vs scorecard 0.6767, a gap of $+0.85$ points with DeLong $p<10^{-54}$; LightGBM $+0.72$; the MLP $-0.17$, significantly \emph{worse} ($p=0.024$). The gap is an order of magnitude smaller than random-split studies suggest, because the features include the platform's own risk pricing and the split is out of time.
+\item \term{Calibration:} every raw model under-predicts PD because the 2015 vintage defaulted more than the training years. Isotonic recalibration on 2014 removes most of the bias but cannot anticipate drift not yet visible in 2014. The scorecard is best-calibrated throughout (ECE 0.0175 vs XGBoost's 0.0214 after identical recalibration); the trees keep the better Brier because Brier also rewards ranking.
+\item \term{Profit:} accepting everyone earns \$705 per applicant, so the model only adds value by pruning the riskiest tail. The scorecard's best policy rejects 6.7\% for $+1.2\%$; XGBoost rejects 9.3\% for $+3.3\%$, about \$14{,}700 more per 1{,}000 applicants ($+2.1\%$ over the scorecard).
+\item \term{Robustness:} the UCI Taiwan dataset reproduces the ranking (XGBoost $+1.50$ AUC points, $p=2.8\times10^{-6}$; MLP again below the scorecard).
+\item \term{Interpretability:} XGBoost's gain importance and the scorecard's IVs agree that platform pricing dominates (rank correlation 0.56) but disagree in encoding (\texttt{int\_rate} vs \texttt{sub\_grade}, nearly the same information).
+\end{itemize}
+
+\section{Limitations, honestly stated}
+
+Only accepted loans are observed, so every model inherits Lending Club's own selection; correcting this (\term{reject inference}) is a known open problem. The profit model is undiscounted with fixed LGD and no recoveries or prepayment. Platform grades were kept as features, which is realistic for an investor but understates what ML could add on raw bureau data. One market and one benign test vintage. The scorecard used automatic equal-frequency bins; expert monotone binning would likely close part of the gap.
+
+\section{Sample questions and answers}
+
+\begin{qa}
+\Q{Why is AUC alone not enough to choose a credit model?}
+\A AUC only measures ranking. A bank also books provisions and capital from the PD values themselves, which requires calibration, and it acts through an accept/reject cutoff, which requires the decision to be profitable. A model can gain AUC while its probabilities become less trustworthy; in this project the raw trees had the best AUC and the worst ECE at the same time.
+
+\Q{What exactly is leakage here, and give one concrete example.}
+\A Any feature not knowable at origination. Example: \texttt{total\_rec\_prncp} (principal received to date). A fully repaid loan has it equal to the loan amount, so it encodes the answer; a model using it gets a near-perfect, meaningless AUC. The cure was a whitelist of 23 origination-time fields, not a blacklist of bad ones.
+
+\Q{Why an out-of-time split instead of random cross-validation?}
+\A Deployment is out of time: a model trained on past cohorts scores future applicants under a different economy. A random split mixes vintages, so train and test share the macro regime, which flatters flexible models and hides calibration drift. The out-of-time protocol exposed exactly that drift: the 2015 vintage defaulted more, and every raw model under-predicted.
+
+\Q{Explain WoE and why banks like it.}
+\A WoE replaces each bin of a feature by the log ratio of its share of goods to its share of bads. It puts every feature, numeric or categorical, missing values included, on the same evidence scale; it linearizes the relationship for the logistic regression; and it makes the final model a readable sum of per-bin points, which regulators and loan officers can audit line by line.
+
+\Q{What does ``20 points to double the odds'' mean?}
+\A The scorecard's log-odds are linearly rescaled so a fixed 20-point gain multiplies the good:bad odds by two, anchored at 600 points for 19:1 odds. It is a presentation layer only; the underlying probabilities are unchanged.
+
+\Q{Why did you calibrate on the 2014 vintage rather than on training data?}
+\A Calibration maps must be fit on data the model did not train on, otherwise they inherit the model's optimism. Using the most recent observed cohort (2014) mirrors bank practice and gives the fairest test: every model gets the identical correction opportunity.
+
+\Q{Platt versus isotonic: when does each matter?}
+\A Platt fits a two-parameter logistic on the model's logit: parametric, safe on small data, assumes a sigmoid-shaped miscalibration. Isotonic fits any monotone step function: more flexible, needs more data, can overfit small validation sets. With 162{,}570 validation loans both behaved almost identically here, so the choice was immaterial; the report shows isotonic.
+
+\Q{If isotonic recalibration was applied, why is any model still miscalibrated on test?}
+\A The calibrator was fit on 2014 outcomes and the 2015 vintage defaulted more than 2014. A monotone map learned on the past cannot anticipate a level shift that has not happened yet. That residual bias is the honest finding: it is why regulators demand ongoing monitoring rather than one-time calibration.
+
+\Q{Why use the DeLong test instead of a plain difference of AUCs?}
+\A Both models are scored on the same test loans, so their AUCs are strongly correlated. DeLong's method estimates the variance of the difference accounting for that correlation; ignoring it would overstate the uncertainty and understate significance.
+
+\Q{Your DeLong p-values are astronomically small. Does that mean the ML advantage is large?}
+\A No. With 283{,}026 test loans the test has enormous power, so even a small true gap is detected with certainty. Statistical significance answers ``is it real'', not ``is it big''. The economic size, $+0.85$ AUC points and $+2.1\%$ profit, is the meaningful quantity, which is why the project also runs the profit analysis.
+
+\Q{Why did the MLP lose to a logistic regression?}
+\A Tabular credit data has heterogeneous, weakly interacting features where trees' axis-aligned splits and the scorecard's monotone binning are well matched inductive biases. The MLP has neither, needs more data per unit of flexibility, and showed ten times the seed variance of the trees. This replicates the literature's conclusion that deep learning does not pay on tabular credit data.
+
+\Q{Why is accepting everyone already profitable, and what does that imply for the model's role?}
+\A The portfolio's interest income exceeds its default losses ($\$705$ per applicant net). The PD model therefore adds value only at the margin, by refusing the riskiest tail where expected loss exceeds expected interest. That is why the whole model comparison concentrates near the optimal cutoff and why the profit gain ($+1.2\%$ to $+3.3\%$) looks small next to the base profit.
+
+\Q{Why keep the platform's grade and interest rate as features? Isn't that circular?}
+\A It matches the perspective of an investor on the platform, who observes them. It does compress the achievable gap, since every model partly re-ranks loans Lending Club already ranked; the memo and report state this as a limitation. Dropping them would simulate a lender building from raw bureau data and would likely widen the ML advantage.
+
+\Q{What is reject inference and why does it matter here?}
+\A The data contain only loans that were approved, so the models never see the applicants Lending Club rejected. A model deployed on the full applicant stream faces a population it was not trained on. Correcting for this selection (reject inference) is an open problem; the project scopes it out and says so.
+
+\Q{Why five seeds for the ML models and none for the scorecard?}
+\A XGBoost, LightGBM and the MLP are stochastic (row/column subsampling, weight initialization, minibatch order), so results are reported as mean and standard deviation over five seeds to show the variance honestly. The scorecard's WoE binning and logistic fit are deterministic.
+
+\Q{Your AUCs (about 0.68) look low compared to the 0.75-plus common in papers. Why?}
+\A Three compounding reasons: out-of-time testing is harder than random splits; the population is pre-filtered twice (Lending Club's own underwriting, then only accepted loans), removing the easy separations; and the feature set is deliberately origination-time only. The Taiwan dataset, with a random stratified split, immediately shows higher AUCs (about 0.77 to 0.79) for the same models, confirming the protocol rather than the models explains the level.
+
+\Q{What was the single most important methodological lesson?}
+\A That evaluation design dominates modelling. The leakage whitelist, the out-of-time split and the choice of criteria each changed conclusions more than any hyperparameter. In particular, the model ranking changes with the question: XGBoost wins discrimination and profit, the scorecard wins calibration, so ``best model'' is undefined until the deployment question is fixed.
+\end{qa}
+
+\vspace{4mm}
+\noindent\textit{Artifacts: code and results at \url{https://github.com/iitgF/T8}; full report \texttt{report.tex}; short report \texttt{report\_simple.tex}.}
+
+\end{document}
