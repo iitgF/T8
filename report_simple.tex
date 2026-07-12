@@ -1,0 +1,112 @@
+% IITG BSc (Hons) DS&AI Term Project Report — SIMPLE / CONDENSED VERSION
+% A shorter, plainer-language companion to report.tex (the full report).
+% Compile with pdfLaTeX on Overleaf. Upload with fig_profit.png.
+\documentclass[a4paper,twocolumn,10pt]{article}
+
+\usepackage[a4paper,top=2.2cm,bottom=2.2cm,left=1.9cm,right=1.9cm,columnsep=0.6cm]{geometry}
+\usepackage{newtxtext,newtxmath}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{xurl}
+\usepackage{titlesec}
+\usepackage[labelfont=bf,labelsep=period,font=small]{caption}
+\usepackage[hidelinks]{hyperref}
+
+\titleformat{\section}{\centering\normalsize\bfseries}{\thesection.}{0.5em}{\MakeUppercase}
+\titlespacing{\section}{0pt}{9pt}{5pt}
+\renewcommand{\figurename}{Fig.}
+
+\begin{document}
+
+\twocolumn[{
+\centering
+{\large\bfseries DOES MACHINE LEARNING BEAT THE CREDIT SCORECARD?\par}
+\vspace{4mm}
+{\itshape François Schmitt (Roll Number: 23035010523)\par}
+\vspace{3mm}
+Term Project Report (Short Version), Trimester 8\\
+B.Sc.\ (Honours) Data Science and Artificial Intelligence\\
+Indian Institute of Technology Guwahati, India\\
+{\ttfamily f.schmitt@op.iitg.ac.in}\par
+\vspace{6mm}
+}]
+
+\begin{center}\textbf{ABSTRACT}\end{center}
+\noindent
+Banks decide whether to grant a loan using a model of the probability of default (PD). Most banks still use a simple, readable logistic-regression scorecard, while research papers claim machine learning does better, usually measuring only how well models rank risky borrowers (AUC). This project tests whether the ML advantage survives the two criteria a lender also needs: calibrated probabilities and profitable accept/reject decisions. On 621{,}022 Lending Club loans, trained on past years and tested on a later year, gradient-boosted trees beat an industry-style scorecard by 0.85 AUC points, kept that edge after both models were recalibrated the same way, and earned 2.1\% more profit at the best cutoff. But the margins are modest, a neural network did worse than the scorecard, and the scorecard remained the best-calibrated model throughout. Well-tuned boosted trees earn their complexity; the forty-year-old scorecard covers most of the distance.
+
+\vspace{2mm}
+\noindent\textbf{\textit{Index Terms:}} Credit scoring, probability of default, calibration, XGBoost, profit-based evaluation
+
+\section{Introduction}
+A PD model is the highest-stakes statistical model in retail banking: it drives loan approvals, pricing, and, under the Basel rules and IFRS~9, how much capital a bank must hold. The industry standard is a weight-of-evidence (WoE) scorecard: bin each input, replace bins by their evidence weight, fit a logistic regression, and express the result as points a loan officer can read. Benchmark studies report that machine learning beats this baseline, but nearly always measure discrimination (AUC) alone. A lender also needs the probabilities themselves to be right (calibration) and needs the model to make money at its operating cutoff (profit). This project tests all three on real loans, with every model seeing identical information.
+
+\section{Problem and Objectives}
+The task is to estimate each applicant's default probability using only what the lender knew on the day the loan was issued. Two design rules dominate. First, leakage: the raw data export has 151 columns, and most describe what happened after origination (payments, recoveries, hardship flags), so an explicit whitelist of 23 origination-time fields was enforced. Second, deployment is out of time: models trained on past cohorts score future applicants, so the split follows the calendar, never randomness. The objectives were: (i) build an honest industry-style WoE scorecard; (ii) build three ML challengers (XGBoost, LightGBM, a neural network) on identical inputs; (iii) evaluate discrimination, calibration before and after identical recalibration, and realized profit, with significance tests; and (iv) check robustness on an independent dataset.
+
+\section{Method}
+\textbf{Scorecard.} Each feature is binned on training data, bins get WoE values, features are screened by information value, and a logistic regression on the WoE features yields the PD, scaled to points (600 points at 19:1 odds, 20 points to double the odds).
+
+\textbf{Challengers.} XGBoost, LightGBM and a two-layer MLP, all on the same design matrix (median-imputed numerics, one-hot categoricals, fit on train only), each retrained over five seeds.
+
+\textbf{Calibration.} Platt scaling and isotonic regression are fit on the 2014 vintage and applied to the 2015 test scores, for every model alike, mimicking how a bank recalibrates a deployed model on its most recent observed cohort.
+
+\textbf{Scoring.} AUC and KS measure ranking; Brier and ECE measure whether the PDs can be taken at face value; profit uses each test loan's actual cash flows (a repaid loan earns its interest; a charged-off loan loses 65\% of principal) across all accept/reject cutoffs. DeLong's test and 1{,}000-resample bootstrap intervals separate real gaps from luck.
+
+\section{Experiments and Results}
+\textbf{Data.} Public Lending Club export, 36-month loans issued 2007--2015 so every outcome is fully observed: 175{,}426 training loans (2007--2013, 12.6\% default), 162{,}570 validation loans (2014, 13.7\%), 283{,}026 test loans (2015, 14.9\%). Robustness: the UCI Taiwan credit-card dataset (30{,}000 clients).
+
+Table~\ref{tab:lb} summarizes the test vintage. XGBoost beats the scorecard by 0.85 AUC points (DeLong $p<10^{-54}$) and LightGBM by 0.72; the MLP is significantly \emph{worse} ($p=0.024$). Every raw model under-predicts risk because the 2015 vintage defaulted more than the training years; recalibration removes most of the bias, but the scorecard stays the best-calibrated model (ECE 0.0175 vs 0.0214). On profit (Fig.~\ref{fig:profit}), accepting everyone earns \$705 per applicant; the scorecard's best policy adds 1.2\%, XGBoost's adds 3.3\%, worth about \$14{,}700 per 1{,}000 applicants over the scorecard. The Taiwan data reproduces the ranking (+1.50 AUC points, $p=2.8\times10^{-6}$).
+
+\begin{table}[t]
+\centering
+\caption{Test vintage (283{,}026 loans, 2015). AUC on raw scores; Brier and ECE after isotonic recalibration; profit at each model's best cutoff, USD per 1{,}000 applicants. Best per column in bold.}
+\label{tab:lb}
+\small
+\begin{tabular}{lrrrr}
+\toprule
+Model & AUC & Brier & ECE & Profit \\
+\midrule
+Scorecard & 0.6767 & 0.1209 & 0.0175 & 713{,}772 \\
+XGBoost   & \textbf{0.6850} & \textbf{0.1203} & 0.0214 & \textbf{728{,}517} \\
+LightGBM  & 0.6843 & 0.1204 & 0.0218 & 725{,}927 \\
+MLP       & 0.6716 & 0.1212 & \textbf{0.0172} & 714{,}401 \\
+\midrule
+Accept all & -- & -- & -- & 705{,}171 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{fig_profit.png}
+\caption{Realized profit per 1{,}000 applicants versus PD acceptance cutoff (isotonic-calibrated PDs), with best operating points marked and the accept-everyone benchmark dashed. Left: full sweep. Right: zoom on the peak, where the boosted trees separate from the scorecard and MLP.}
+\label{fig:profit}
+\end{figure*}
+
+\section{Discussion}
+The ML advantage is real but modest, and it belongs to the trees. Two things compress the gap. The features include the platform's own risk pricing (grade, interest rate), so all models largely re-rank loans already ranked once; and the out-of-time split denies flexible models the flattery of a random split, in which train and test share the same economy. Calibration is a separate axis: raw boosted trees are visibly miscalibrated, and even after identical recalibration the scorecard keeps the lower ECE, while the trees keep the better Brier score because Brier also rewards ranking. The profit analysis shows where the AUC edge matters: only near the optimal cutoff, where XGBoost's sharper ranking prunes a slightly better tail of risky loans. Limitations: only accepted loans are observed (reject inference is an open problem), the cash-flow model is simple (fixed 65\% loss, no discounting or recoveries), and 2015 was a benign test year.
+
+\section{Conclusion}
+On 621{,}022 loans under a leak-proof out-of-time protocol, gradient-boosted trees beat the industry-standard scorecard on discrimination, recalibrated Brier score and profit, and the result reproduced on an independent dataset. The answer is a qualified yes: statistically unambiguous, economically modest (+2.1\% profit), delivered only by the boosted trees, with the scorecard remaining the best-calibrated model. The clearest lessons were methodological: leakage control was the highest-leverage work in the project, and the model ranking changes with the question asked, so ``best model'' is undefined until the deployment question is fixed. Useful next steps: reject inference, survival models for default timing, discounted cash flows, and a recession-vintage stress test.
+
+\section{Artifacts}
+Code: \url{https://github.com/iitgF/T8} (the \texttt{creditrisk} package, run script and executed notebook). LaTeX source (Overleaf): \url{https://www.overleaf.com/project/6a524fb2acaf61e8bc3c5a8f}. Full report: \texttt{report.tex}. AI-assisted tooling was used for refactoring and drafting; all decisions, checks and the final text are the author's, and every number was reproduced from the committed code.
+
+\begin{thebibliography}{9}
+\small
+\bibitem{siddiqi2006}
+N.~Siddiqi, \textit{Credit Risk Scorecards: Developing and Implementing Intelligent Credit Scoring}. Hoboken, NJ: Wiley, 2006.
+
+\bibitem{lessmann2015}
+S.~Lessmann, B.~Baesens, H.-V. Seow, and L.~C. Thomas, ``Benchmarking state-of-the-art classification algorithms for credit scoring: An update of research,'' \textit{European J. Operational Research}, vol.~247, no.~1, pp. 124--136, 2015. \url{https://doi.org/10.1016/j.ejor.2015.05.030}
+
+\bibitem{gunnarsson2021}
+B.~R. Gunnarsson, S.~vanden Broucke, B.~Baesens, M.~\'Oskarsd\'ottir, and W.~Lemahieu, ``Deep learning for credit scoring: Do or don't?'' \textit{European J. Operational Research}, vol.~295, no.~1, pp. 292--305, 2021. \url{https://doi.org/10.1016/j.ejor.2021.03.006}
+
+\bibitem{delong1988}
+E.~R. DeLong, D.~M. DeLong, and D.~L. Clarke-Pearson, ``Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach,'' \textit{Biometrics}, vol.~44, no.~3, pp. 837--845, 1988. \url{https://doi.org/10.2307/2531595}
+\end{thebibliography}
+
+\end{document}
