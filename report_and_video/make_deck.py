@@ -381,7 +381,74 @@ notes(s, "Feature importance vs information value: both models rely on the "
          "platform's risk pricing, so all four models largely re-rank loans "
          "Lending Club already ranked. The scorecard stays point-readable.")
 
-# ---------------------------------------------------------------- 11: robustness
+# ---------------------------------------------------------------- 11: ablation
+s = slide()
+header(s, "Ablation", "What If We Hide Lending Club's Own Pricing?")
+text(s, Inches(0.6), Inches(1.65), Inches(12.1), Inches(0.55),
+     [[("The concern:  ", {"bold": True, "color": NAVY}),
+       ("grade, sub-grade and interest rate are one variable in three "
+        "notations, the platform's own risk assessment. They supply 36% of "
+        "XGBoost's gain and 43% of LightGBM's. So are the models assessing "
+        "credit risk, or just re-ranking loans Lending Club already ranked?",
+        {})]], size=14.5)
+for i, (t1, t2) in enumerate([
+        ("Variant A", "Drop grade, sub-grade, interest rate.  20 features left."),
+        ("Variant B", "Also drop installment: with the term fixed at 36 months "
+         "it tracks the rate at ρ = 0.998, so A still leaks pricing "
+         "through it. B is the honest test.")]):
+    y = Inches(2.5) + i * Inches(1.15)
+    box(s, Inches(0.6), y, Inches(5.8), Inches(0.98), fill=LIGHT, round_=True)
+    text(s, Inches(0.9), y + Inches(0.13), Inches(1.5), Inches(0.4), t1,
+         size=15, color=GOLD, bold=True)
+    text(s, Inches(2.35), y + Inches(0.11), Inches(3.8), Inches(0.8), t2,
+         size=12, color=INK)
+
+rows = [("XGBoost", "0.6850", "0.6637", "−0.021", INK),
+        ("LightGBM", "0.6843", "0.6622", "−0.022", INK),
+        ("MLP", "0.6716", "0.6428", "−0.029", INK),
+        ("Scorecard", "0.6767", "0.6397", "−0.037", RED)]
+tbl = s.shapes.add_table(5, 4, Inches(6.9), Inches(2.5), Inches(5.8),
+                         Inches(2.3)).table
+for j, (h, w) in enumerate([("Model", 1.9), ("Baseline", 1.2),
+                            ("Variant B", 1.3), ("Change", 1.4)]):
+    tbl.columns[j].width = Inches(w)
+    c = tbl.cell(0, j)
+    c.text = h
+    c.fill.solid(); c.fill.fore_color.rgb = NAVY
+    for p in c.text_frame.paragraphs:
+        for r in p.runs:
+            r.font.bold = True; r.font.size = Pt(12.5)
+            r.font.color.rgb = WHITE; r.font.name = "Calibri"
+for i, (m, b, v, d, col) in enumerate(rows):
+    for j, val in enumerate([m, b, v, d]):
+        c = tbl.cell(i + 1, j)
+        c.text = val
+        c.fill.solid()
+        c.fill.fore_color.rgb = WHITE if i % 2 else LIGHT
+        for p in c.text_frame.paragraphs:
+            for r in p.runs:
+                r.font.size = Pt(12.5); r.font.name = "Calibri"
+                r.font.bold = (j == 0)
+                r.font.color.rgb = col if j == 3 else INK
+
+bullets(s, Inches(0.6), Inches(5.05), Inches(12.1), Inches(2.1), [
+    ("The pricing was hiding the ML advantage, not creating it:", "the "
+     "scorecard degrades almost twice as fast as the trees, so XGBoost's lead "
+     "grows from +0.83 to +2.39 AUC points, and its profit edge to $15,400 "
+     "per 1,000 applicants."),
+    ("The trees used the proxy; the scorecard could not:", "the scorecard "
+     "scores 0.6397 under both variants because its information-value screen "
+     "had already discarded installment as too weak. The old-fashioned screen "
+     "was the protection."),
+], size=14, space_after=9)
+notes(s, "The honest follow-up experiment. The platform's grade and rate are "
+         "legitimate inputs for an investor, but they narrow the question. "
+         "Rerunning without them: every model gets worse, the scorecard worst, "
+         "so the ML advantage nearly triples. And the scorecard's IV screen "
+         "had already thrown out the installment proxy that both tree "
+         "ensembles were quietly using.")
+
+# ---------------------------------------------------------------- 12: robustness
 s = slide()
 header(s, "Robustness and limitations", "Same Ranking on an Independent Dataset")
 box(s, Inches(0.6), Inches(1.85), Inches(5.9), Inches(2.6), fill=LIGHT, round_=True)
@@ -401,8 +468,8 @@ bullets(s, Inches(6.9), Inches(2.05), Inches(5.9), Inches(5.0), [
      "reject inference is an open problem."),
     ("Simple profit model:", "undiscounted, fixed LGD of 0.65, no partial "
      "recoveries or prepayment."),
-    ("Platform grades kept as features:", "realistic for an investor, but "
-     "understates what ML could add on raw bureau data."),
+    ("Platform grades kept as features:", "realistic for an investor; the "
+     "ablation shows this understates the ML advantage by about 3x."),
     ("One market, one test vintage:", "2015 was benign; a recession vintage "
      "could reorder the calibration findings."),
     ("My scorecard is unconstrained:", "expert binning with monotonicity "
@@ -412,7 +479,7 @@ notes(s, "Taiwan reproduces the ranking, so it is not a Lending Club artifact. "
          "Then the honest limitations: reject inference, simple cash-flow "
          "model, platform grades as features, single benign test vintage.")
 
-# ---------------------------------------------------------------- 12: wrap-up
+# ---------------------------------------------------------------- 13: wrap-up
 s = slide()
 box(s, 0, 0, SW, SH, fill=NAVY)
 text(s, Inches(0.8), Inches(0.55), Inches(11.7), Inches(0.35), "WRAP-UP",
@@ -425,8 +492,12 @@ text(s, Inches(0.8), Inches(2.15), Inches(11.7), Inches(2.9), [
      ("discrimination (+0.85 AUC pts, p < 10⁻⁵⁴), Brier after identical "
       "recalibration, and profit (+2.1% at the optimal cutoff).", {})],
     [("But the margins are modest and uneven:  ", {"bold": True, "color": GOLD}),
-     ("the MLP loses to the scorecard outright, and the scorecard stays the "
+     ("the MLP loses to the scorecard outright, and the scorecard stays "
       "better calibrated than either tree ensemble.", {})],
+    [("The margin depends on the information set:  ", {"bold": True, "color": GOLD}),
+     ("withholding the platform's own pricing widens XGBoost's lead from "
+      "0.83 to 2.39 AUC points, so the headline number understates what ML "
+      "offers a lender underwriting from bureau data directly.", {})],
     [("What I learned:  ", {"bold": True, "color": GOLD}),
      ("leakage control was the highest-leverage work in the project; the model "
       "ranking changes with the question asked; and vintage drift is why PD "
