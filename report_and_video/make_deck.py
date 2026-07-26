@@ -337,13 +337,13 @@ bullets(s, Inches(6.6), Inches(1.95), Inches(6.1), Inches(4.5), [
      "maximizing ensembles are not probability models."),
     ("Isotonic recalibration helps everyone", "but cannot anticipate drift that "
      "was not yet visible in 2014."),
-    ("The scorecard stays best-calibrated:", "ECE 0.0175 vs XGBoost's 0.0214 "
+    ("The scorecard beats the trees on calibration:", "ECE 0.0175 vs XGBoost's 0.0214 "
      "after identical recalibration. The trees keep the better Brier score, "
      "which also rewards discrimination."),
 ], size=14.5, space_after=11)
 notes(s, "Reliability diagrams: raw curves above the diagonal because of "
          "vintage drift. Isotonic recalibration on 2014 removes most but not "
-         "all bias. Scorecard is the best-calibrated model throughout; this is "
+         "all bias. The trees never match the scorecard on calibration; this is "
          "why regulators monitor rather than trust PD models.")
 
 # ---------------------------------------------------------------- 9: profit
@@ -426,7 +426,7 @@ text(s, Inches(0.8), Inches(2.15), Inches(11.7), Inches(2.9), [
       "recalibration, and profit (+2.1% at the optimal cutoff).", {})],
     [("But the margins are modest and uneven:  ", {"bold": True, "color": GOLD}),
      ("the MLP loses to the scorecard outright, and the scorecard stays the "
-      "best-calibrated model throughout.", {})],
+      "better calibrated than either tree ensemble.", {})],
     [("What I learned:  ", {"bold": True, "color": GOLD}),
      ("leakage control was the highest-leverage work in the project; the model "
       "ranking changes with the question asked; and vintage drift is why PD "

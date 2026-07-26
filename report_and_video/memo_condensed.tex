@@ -65,7 +65,7 @@ XGBoost 0.6850 AUC vs scorecard 0.6767 ($+0.85$ pts, $p<10^{-54}$); LightGBM $+0
 
 All raw models under-predict PD (2015 defaulted more than training years); isotonic fixes most, not all.
 
-Scorecard stays best-calibrated (ECE 0.0175 vs 0.0214); trees keep the better Brier.
+Trees stay behind the scorecard on calibration (ECE 0.0214 vs 0.0175) but keep the better Brier.
 
 Profit: accept-all \$705{,}171 per 1{,}000; scorecard best $+1.2\%$; XGBoost best $+3.3\%$ ($+\$14{,}700$ over scorecard, $+2.1\%$).
 
@@ -79,7 +79,7 @@ Taiwan robustness reproduces the ranking ($+1.50$ pts, $p=2.8\times10^{-6}$). Ve
 
 \textbf{Q. Why out-of-time, not cross-validation?} A. Deployment scores future applicants under a different economy; random splits share the regime across train and test, flattering flexible models and hiding drift.
 
-\textbf{Q. Why do banks still use scorecards?} A. Stable, auditable, point-readable, regulator-friendly; and here, best-calibrated with most of the trees' performance.
+\textbf{Q. Why do banks still use scorecards?} A. Stable, auditable, point-readable, regulator-friendly; and here, better calibrated than the trees with most of their performance.
 
 \textbf{Q. Why fit calibrators on 2014?} A. Must be out-of-sample for the model and recent for the deployment; identical treatment keeps the comparison fair.
 

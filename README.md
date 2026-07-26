@@ -9,8 +9,8 @@ and accept/reject profit, under a strict out-of-time protocol with no leakage.
 2014, test on 2015), XGBoost beats a weight-of-evidence scorecard by **0.85 AUC points**
 (DeLong p < 1e-54) and the edge survives isotonic recalibration and converts into
 **+2.1% profit** at the optimal cutoff. But the margins are modest, the MLP is
-*significantly worse* than the scorecard, and the scorecard is the best-calibrated
-model by ECE throughout. The ranking reproduces on the UCI Taiwan dataset.
+*significantly worse* than the scorecard, and neither tree ensemble matches the
+scorecard's calibration. The ranking reproduces on the UCI Taiwan dataset.
 
 ## Leaderboard (out-of-time test = 2015 vintage, 283,026 loans)
 
