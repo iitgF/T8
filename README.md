@@ -46,10 +46,22 @@ creditrisk/                  modular pipeline (importable package)
 
 run_study.py                 entry point (python run_study.py [--quick])
 study_notebook.ipynb         annotated study over the saved results
+inspect_csv.py               summary of the raw export: rows, size, kept vs
+                             dropped columns, then N rows with all headers
 report.tex                   term-project report (compile on Overleaf)
+report_simple.tex            condensed short version of the report
 figures/                     figures used by the report
 results/                     leaderboards, significance tests, profit curves
 data/download_lc.py          re-downloads the Lending Club file (374 MB)
+
+report_and_video/            written and video deliverables
+  T8.pdf                     compiled report (short, memos, deck also here)
+  memo_standard.tex          concepts and methodology, with sample Q&A
+  memo_condensed.tex         two-page rapid reference
+  voiceover.tex              per-slide narration script for the video
+  make_deck.py               builds the 12-slide deck from the figures
+  Project_Video_Presentation.pptx   the deck
+  title_slide.png            IITG title slide, also the YouTube thumbnail
 ```
 
 ## Reproducing
