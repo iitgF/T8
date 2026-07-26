@@ -32,3 +32,7 @@ title_filled.pdf
 First slide_video.pptx
 IIT_Guwahati_Video_Submission_Guide.docx
 iitg_bsc_internship_term_project_report_template.pdf
+
+# Large raw data / samples in the project root (re-downloadable via data/download_lc.py)
+/*.csv
+/*.csv.gz
