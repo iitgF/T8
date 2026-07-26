@@ -1,13 +1,13 @@
 % IITG BSc (Hons) DS&AI Term Project Report
 % Self-contained emulation of the course template (ICASSP-style, two-column).
-% Compile with pdfLaTeX on Overleaf. Upload together with the four fig_*.png files.
+% Four pages of body plus one page of references.
+% Compile with pdfLaTeX on Overleaf. Upload with fig_reliability_col.png and fig_profit_col.png.
 \documentclass[a4paper,twocolumn,10pt]{article}
 
 \usepackage[a4paper,top=2.2cm,bottom=2.2cm,left=1.9cm,right=1.9cm,columnsep=0.6cm]{geometry}
 \usepackage{newtxtext,newtxmath}          % Times, as in the template
 \usepackage{amsmath,amssymb}
 \usepackage{graphicx}
-\usepackage{dblfloatfix}      % lets full-width figures place on the current page, not drift to the end
 \usepackage{booktabs}
 \usepackage{xurl}   % break long URLs anywhere so DOIs/links wrap inside narrow columns
 \usepackage{titlesec}
@@ -17,9 +17,10 @@
 % --- template-style section headings: "1. INTRODUCTION" centered bold caps ---
 \titleformat{\section}{\centering\normalsize\bfseries}{\thesection.}{0.5em}{\MakeUppercase}
 \titleformat{\subsection}{\normalsize\bfseries}{\thesubsection.}{0.5em}{}
-\titlespacing{\section}{0pt}{10pt}{6pt}
-\titlespacing{\subsection}{0pt}{8pt}{4pt}
+\titlespacing{\section}{0pt}{8pt}{4pt}
+\titlespacing{\subsection}{0pt}{6pt}{3pt}
 \renewcommand{\figurename}{Fig.}
+\captionsetup{skip=4pt}
 
 \begin{document}
 
@@ -29,317 +30,197 @@
 {\large\bfseries DOES MACHINE LEARNING BEAT THE CREDIT SCORECARD? DISCRIMINATION, CALIBRATION AND PROFIT IN PROBABILITY-OF-DEFAULT MODELLING\par}
 \vspace{4mm}
 {\itshape François Schmitt (Roll Number: 23035010523)\par}
-\vspace{4mm}
-Term Project Report\\
-Trimester 8\\
 \vspace{3mm}
+Term Project Report, Trimester 8\\
 B.Sc.\ (Honours) Data Science and Artificial Intelligence\\
 Indian Institute of Technology Guwahati, India\\
 {\ttfamily f.schmitt@op.iitg.ac.in}\par
-\vspace{7mm}
+\vspace{6mm}
 }]
 
 % ------------------------------------------------------------------ abstract
 \begin{center}\textbf{ABSTRACT}\end{center}
 \noindent
-This report presents a self-guided term project on probability-of-default (PD) modelling, the central model of retail credit risk. Banks overwhelmingly deploy logistic-regression scorecards, while the machine-learning literature reports that gradient-boosted trees dominate them; the literature, however, scores models almost exclusively by discrimination (AUC), whereas a lender needs calibrated probabilities and profitable accept/reject decisions. This project tests whether the ML advantage survives on the criteria that matter. An industry-style weight-of-evidence scorecard and three challengers (XGBoost, LightGBM, a multilayer perceptron) were built on 621{,}022 Lending Club loans under a strict out-of-time protocol (train $\le$2013, calibrate on the 2014 vintage, test on the 2015 vintage; origination-time features only) and evaluated on discrimination (AUC, KS), calibration before and after Platt and isotonic recalibration (Brier, ECE), and realized profit across accept/reject cutoffs. The boosted trees win, but narrowly and unevenly: XGBoost beats the scorecard by 0.85 AUC points (DeLong $p<10^{-54}$), the edge persists after both models are recalibrated, and it buys 2.1\% higher profit at the optimal cutoff; the MLP is significantly \emph{worse} than the scorecard, and the scorecard has the best raw calibration by ECE, with the recalibrated scorecard and MLP indistinguishable from each other and both ahead of the trees. A robustness run on the UCI Taiwan credit-card dataset reproduces the ranking. An ablation that withholds the platform's own risk pricing shows the modest margin to be a property of the information set rather than of the models: with pricing withheld the scorecard degrades roughly twice as fast as the trees and XGBoost's lead almost triples, to 2.39 AUC points. Well-tuned boosted trees earn their complexity; the forty-year-old scorecard covers most of the distance, and the closer the two come, the more of Lending Club's own underwriting is doing the work.
+Banks deploy logistic-regression scorecards for probability-of-default (PD) modelling, while the machine-learning literature reports that gradient-boosted trees dominate them. That literature scores models almost exclusively by discrimination (AUC), whereas a lender also needs calibrated probabilities and profitable accept/reject decisions. This project tests whether the ML advantage survives all three criteria. An industry-style weight-of-evidence scorecard and three challengers (XGBoost, LightGBM, a multilayer perceptron) were built on 621{,}022 Lending Club loans under a strict out-of-time protocol using origination-time features only. XGBoost beats the scorecard by 0.85 AUC points (DeLong $p<10^{-54}$), keeps the edge after identical recalibration, and earns 2.1\% more profit at its optimal cutoff; the MLP is significantly \emph{worse} than the scorecard, and neither tree ensemble matches the scorecard's calibration. An ablation withholding the platform's own risk pricing shows the modest margin to be a property of the information set rather than of the models: the scorecard then degrades almost twice as fast as the trees and XGBoost's lead nearly triples, to 2.39 points. Boosted trees earn their complexity, but the forty-year-old scorecard covers most of the distance.
 
-\vspace{2mm}
+\vspace{1mm}
 \noindent\textbf{\textit{Index Terms:}} Credit scoring, probability of default, calibration, XGBoost, weight of evidence, profit-based evaluation
 
 % ------------------------------------------------------------------ 1
 \section{Introduction}
 
-When a bank decides whether to grant a loan, the decision rests on a single model output: the applicant's probability of default (PD). PD models sit at the heart of retail banking; they set interest rates and credit limits, drive the accept/reject decision, and, under the Basel accords and IFRS~9, determine regulatory capital and loan-loss provisions \cite{basel2006}. Because capital requirements scale with estimated PDs, these are arguably the highest-stakes statistical models in finance, and regulators require them to be accurate, stable and explainable.
+When a bank grants a loan, the decision rests on one model output: the applicant's probability of default (PD). PD models set rates and limits, drive the accept/reject decision, and under the Basel accords and IFRS~9 determine regulatory capital and loan-loss provisions \cite{basel2006}. Because capital scales with estimated PDs, these are among the highest-stakes statistical models in finance, and regulators require them to be accurate, stable and explainable. The industry standard is old technology: a logistic regression on weight-of-evidence (WoE) transformed features, packaged as an additive point scorecard \cite{siddiqi2006, hand1997}.
 
-The industry standard is remarkably old technology: a logistic regression fit on weight-of-evidence (WoE) transformed features, packaged as an additive point scorecard \cite{siddiqi2006, hand1997}. Over the past decade, a large benchmarking literature has reported that machine-learning models, particularly gradient-boosted tree ensembles, outperform logistic regression on credit data \cite{lessmann2015, gunnarsson2021}. Yet almost all of that evidence is stated in terms of discrimination, the ability to rank bad borrowers above good ones, summarized by AUC. Discrimination is not what a lender ultimately consumes. Provisioning and capital need the PD itself to be right on average (calibration), and the lending decision needs the model to make money at an operating cutoff (profit). A model can gain AUC while producing badly miscalibrated probabilities, and a calibrated but weakly discriminating model can approach a stronger model's profit at the right cutoff.
+A large benchmarking literature reports that gradient-boosted trees outperform logistic regression on credit data \cite{lessmann2015, gunnarsson2021}, but states that evidence almost entirely as discrimination, the ability to rank bad borrowers above good ones, summarized by AUC. Discrimination is not what a lender consumes. Provisioning needs the PD itself to be right on average (calibration), and lending needs the model to make money at an operating cutoff (profit). A model can gain AUC while producing badly miscalibrated probabilities.
 
-This project puts the scorecard-versus-ML question to a controlled test on the criteria that matter. A single pipeline builds an industry-style WoE scorecard and three ML challengers on identical origination-time information from real consumer loans, evaluates them out of time (later vintages than training), applies identical post-hoc recalibration to every model, and translates every model's predictions into accept/reject profit under an explicit cash-flow assumption, so that any claimed ML advantage must survive calibration and decision analysis rather than an AUC comparison alone.
-
-Section~2 formulates the problem and lists the objectives. Section~3 details the methodology: the data discipline, the scorecard, the challengers, calibration and the profit model. Section~4 presents the experimental setup and results. Section~5 discusses and interprets the findings, Section~6 concludes, and Section~7 links the project artifacts.
+This project puts the question to a controlled test. One pipeline builds a scorecard and three challengers on identical origination-time information, evaluates them out of time, applies identical recalibration to every model, and converts predictions into realized profit, so any claimed advantage must survive calibration and decision analysis rather than an AUC comparison alone. Section~2 states the problem, Section~3 the method, Section~4 the experiments and results, Section~5 discusses, and Section~6 concludes.
 
 % ------------------------------------------------------------------ 2
 \section{Problem Statement and Objectives}
 
-\subsection{Problem Statement}
+Let $(\mathbf{x}_i, y_i)$ describe loan $i$, where $\mathbf{x}_i$ holds only information available on the issue date and $y_i\in\{0,1\}$ marks eventual charge-off. The task is to produce $\hat p_i=\widehat{\Pr}(y_i=1\,|\,\mathbf{x}_i)$ such that risky applicants rank above safe ones, $\hat p_i$ is numerically trustworthy, and an accept/reject rule built on it is profitable.
 
-Let $(\mathbf{x}_i, y_i)$ describe loan $i$, where $\mathbf{x}_i$ contains only information available on the day the loan was issued and $y_i \in \{0,1\}$ indicates whether the loan was eventually charged off. The task is \textbf{probability-of-default estimation}: produce $\hat p_i = \widehat{\Pr}(y_i = 1 \,|\, \mathbf{x}_i)$ for future applicants, such that (i) risky applicants are ranked above safe ones, (ii) $\hat p_i$ is numerically trustworthy, and (iii) an accept/reject rule built on $\hat p_i$ is profitable.
+Two features of the problem shape the design. First, \emph{leakage is the dominant failure mode}: a raw servicing extract contains dozens of post-origination fields that trivially predict the outcome, so the feature set must be an explicit origination-time whitelist. Second, \emph{deployment is out of time}: a model trained on past cohorts scores future applicants under a shifted economy, so a random split flatters every model and splits must follow the calendar.
 
-Two features of the problem shape the entire design. First, \emph{leakage is the dominant failure mode}: a raw loan servicing extract contains dozens of post-origination fields (payments received, recoveries, hardship flags) that trivially predict the outcome, so the feature set must be restricted to an explicit origination-time whitelist. Second, \emph{the deployment setting is out of time}: a model trained on past cohorts scores future applicants under a shifted economy, so a random train/test split flatters every model; splits must follow the calendar.
-
-The scope is deliberately constrained: one consumer-credit market (Lending Club personal loans) as the main study with one independent robustness dataset, 36-month loans only so that every outcome is fully observed, origination-time features only, and a fixed loss-given-default assumption for the profit analysis.
-
-\subsection{Objectives}
-
-\begin{enumerate}
-  \item To implement an honest industry-standard baseline: a weight-of-evidence scorecard with information-value screening, logistic regression and points-to-double-odds scaling.
-  \item To implement three ML challengers (XGBoost, LightGBM, MLP) on the identical origination-time information set.
-  \item To design a leak-proof out-of-time evaluation protocol with discrimination (AUC, KS), calibration (Brier, ECE, reliability diagrams) and significance testing (DeLong, bootstrap).
-  \item To apply identical post-hoc recalibration (Platt, isotonic) to every model and measure whether the ML advantage survives it.
-  \item To evaluate all models by expected profit across accept/reject cutoffs under an explicit cash-flow model.
-  \item To verify robustness on an independent dataset and deliver a reproducible, modular codebase.
-\end{enumerate}
+The objectives were to implement an honest industry-standard WoE scorecard; to implement three ML challengers on identical information; to evaluate discrimination, calibration before and after identical recalibration, and realized profit, each with significance testing; to quantify how much of the outcome depends on the platform's own risk pricing; and to verify robustness on an independent dataset with a reproducible codebase. The scope is deliberately narrow: one consumer-credit market, 36-month loans only so every outcome is observed, and a fixed loss-given-default assumption.
 
 % ------------------------------------------------------------------ 3
-\section{Methodology / Approach}
+\section{Methodology}
 
-\subsection{Overall Workflow}
+\textbf{Workflow.} The raw export is reduced to the origination-time whitelist; loans are split by issue date into train, validation and test vintages; the scorecard and challengers are fit on train with validation used for early stopping; every model's raw PDs are recalibrated on the validation vintage; raw and recalibrated PDs are scored on the test vintage with DeLong tests and bootstrap intervals; and each model's PDs drive an accept/reject sweep scored on the test loans' actual cash flows. ML models are retrained across five seeds.
 
-The pipeline runs end to end from the raw loan export to a significance-tested comparison: (1)~the raw export is reduced to an explicit whitelist of origination-time fields, and 36-month loans with resolved outcomes are retained; (2)~loans are split by issue date into train ($\le$2013), validation (2014) and test (2015) vintages; (3)~the scorecard and the three challengers are fit on the training vintages, with the validation vintage used for early stopping; (4)~each model's raw PDs are recalibrated on the validation vintage by Platt scaling and isotonic regression, mimicking a bank recalibrating a deployed model on its most recent observed cohort; (5)~raw and recalibrated PDs are scored on the 2015 test vintage for discrimination and calibration, with DeLong tests and bootstrap confidence intervals; (6)~each model's PDs drive an accept/reject sweep whose realized profit is computed from the test loans' actual cash-flow outcomes. ML models are retrained across five seeds; every stage sees only information available at its point on the calendar.
-
-\subsection{Technical Details}
-
-\textbf{Scorecard baseline.} Each numeric feature is quantile-binned on the training data (missing values form their own bin); each categorical feature uses its levels with rare levels pooled. Bin $j$ of a feature receives the weight of evidence
+\textbf{Scorecard.} Numeric features are quantile-binned on training data (missing values form their own bin) and categorical levels are pooled when rare. Bin $j$ receives the weight of evidence
 \begin{equation}
-\mathrm{WoE}_j = \ln\!\left(\frac{g_j / g}{b_j / b}\right),
+\mathrm{WoE}_j=\ln\!\left(\frac{g_j/g}{b_j/b}\right),
 \label{eq:woe}
 \end{equation}
-where $g_j, b_j$ count goods and bads in the bin and $g, b$ their totals (counts smoothed by 0.5). Features are screened by information value, $\mathrm{IV} = \sum_j (g_j/g - b_j/b)\,\mathrm{WoE}_j$, keeping $\mathrm{IV} \ge 0.02$ \cite{siddiqi2006}. A logistic regression on the WoE-transformed features yields the PD, which is also expressed as an additive score scaled so that 600 points correspond to 19:1 good:bad odds and 20 points double the odds. This is the regulated-bank workhorse: every input enters through a monotone-ish transform and the final model is a readable sum of points.
+with $g_j,b_j$ the goods and bads in the bin and $g,b$ their totals, counts smoothed by 0.5. Features are screened by information value, $\mathrm{IV}=\sum_j(g_j/g-b_j/b)\mathrm{WoE}_j$, keeping $\mathrm{IV}\ge0.02$ \cite{siddiqi2006}. A logistic regression on the WoE features yields the PD, also expressed as additive points scaled so that 600 points correspond to 19:1 good:bad odds and 20 points double the odds. Every input enters through a monotone-ish transform and the model is a readable sum of points.
 
-\textbf{ML challengers.} XGBoost \cite{chen2016} and LightGBM \cite{ke2017} are gradient-boosted tree ensembles (2{,}000 trees maximum, learning rate 0.05, depth 5 / 31 leaves, row and column subsampling 0.8, early-stopped on validation AUC); the MLP is a two-layer network (64 and 32 units, ReLU, Adam, early stopping) on standardized inputs. All three consume the same design matrix, median-imputed numerics plus one-hot categoricals fit on the training vintages only, so performance differences come from the learner rather than the preprocessing. Each is retrained with five seeds and results are reported as mean $\pm$ standard deviation.
+\textbf{Challengers.} XGBoost \cite{chen2016} and LightGBM \cite{ke2017} are boosted tree ensembles (2{,}000 trees maximum, learning rate 0.05, depth 5 and 31 leaves respectively, row and column subsampling 0.8, early-stopped on validation AUC); the MLP is a two-layer network (64 and 32 units, ReLU, Adam, early stopping) on standardized inputs. All three consume one design matrix, median-imputed numerics plus one-hot categoricals fit on train only, so differences come from the learner rather than the preprocessing.
 
-\textbf{Calibration.} A PD model is calibrated if, among loans assigned $\hat p \approx q$, a fraction $q$ actually defaults. Post-hoc recalibration fits a monotone map on held-out data: Platt scaling \cite{platt1999} refits a one-parameter logistic on the raw model logit, and isotonic regression \cite{zadrozny2002} fits a monotone step function. Both are fit on the 2014 validation vintage and applied to the 2015 test scores. Calibration is measured by the Brier score and the expected calibration error
-\begin{equation}
-\mathrm{ECE} = \sum_{k=1}^{10} \frac{n_k}{n}\,\bigl|\bar y_k - \bar p_k\bigr|,
-\label{eq:ece}
-\end{equation}
-over equal-frequency bins \cite{guo2017}, alongside reliability diagrams.
+\textbf{Calibration.} A PD model is calibrated if, among loans assigned $\hat p\approx q$, a fraction $q$ defaults. Platt scaling \cite{platt1999} refits a one-parameter logistic on the raw model logit and isotonic regression \cite{zadrozny2002} fits a monotone step function; both are fit on the validation vintage and applied to test scores, mimicking a bank recalibrating on its most recent observed cohort. Calibration is measured by the Brier score and by the expected calibration error, the mean absolute gap between predicted PD and observed default rate over ten equal-frequency bins \cite{guo2017}.
 
-\textbf{Profit model.} The lender accepts every applicant with $\hat p_i \le c$ and the cutoff $c$ is swept over $(0,1)$. Realized profit per accepted loan uses the loan's actual outcome: a repaid 36-month loan earns its total interest, $36 \cdot \text{installment}_i - \text{principal}_i$ (undiscounted), and a charged-off loan loses $\mathrm{LGD} \times \text{principal}_i$ with $\mathrm{LGD} = 0.65$, a standard unsecured-lending assumption. Profit is reported per 1{,}000 applicants. This is deliberately a simple, fully stated cash-flow model: it prices exactly the trade-off a PD cutoff controls, foregone interest against principal losses.
-
-\textbf{Significance.} AUC differences on the shared test set are tested with DeLong's method for correlated ROC curves \cite{delong1988} (fast implementation of \cite{sun2014}), and confidence intervals for paired AUC and Brier differences use the percentile bootstrap over test loans (1{,}000 resamples).
+\textbf{Profit and significance.} The lender accepts every applicant with $\hat p_i\le c$ and $c$ is swept over $(0,1)$. A repaid 36-month loan earns $36\cdot\text{installment}_i-\text{principal}_i$ (undiscounted) and a charged-off loan loses $\mathrm{LGD}\times\text{principal}_i$ with $\mathrm{LGD}=0.65$; profit is reported per 1{,}000 applicants. AUC differences on the shared test set are tested by DeLong's method for correlated ROC curves \cite{delong1988, sun2014}, with percentile bootstrap intervals over 1{,}000 resamples.
 
 % ------------------------------------------------------------------ 4
 \section{Experiments and Results}
 
-\subsection{Experimental Setup}
+\subsection{Data}
 
-\textbf{Data.} Lending Club accepted personal loans, public export 2007--2018Q4 \cite{lendingclubdata}: 2{,}260{,}701 loans and 151 columns in the raw file. Restricting to 36-month loans issued 2007--2015 guarantees every loan matured before the data ends, so no outcome is right-censored, and retaining only resolved outcomes leaves 621{,}022 loans issued between June~2007 and December~2015, of which 13.95\% were charged off.
+Lending Club accepted personal loans, public export 2007--2018Q4 \cite{lendingclubdata}: 2{,}260{,}701 loans and 151 columns. Restricting to 36-month loans issued 2007--2015 guarantees every loan matured before the data ends, so no outcome is right-censored; keeping only resolved outcomes leaves \textbf{621{,}022 loans} issued June~2007 to December~2015, of which \textbf{13.95\%} were charged off.
 
-These are small unsecured consumer loans. Amounts run from \$500 to the platform's \$35{,}000 ceiling with a median of \$10{,}000 and a mean of \$12{,}481; monthly instalments have a median of \$342. Interest rates span 5.3\% to 29.0\% with a mean near 12\%. Borrowers report a median annual income of \$60{,}000 and carry a median debt-to-income ratio of 17\%, with a median 15 years of credit history. Loan purposes are dominated by refinancing: 56.6\% debt consolidation and 24.2\% credit-card repayment, with home improvement (5.8\%) a distant third. Housing splits 46.4\% mortgage, 43.4\% renting and 10.2\% outright ownership. The platform's own grades concentrate in the middle of its scale (A 23.0\%, B 34.1\%, C 26.2\%, D 12.3\%), with the high-risk tail thin (E to G together 4.3\%). One consequence of Lending Club's own acceptance policy is visible in the credit scores: the minimum FICO in the sample is 612 and the median only 692, a narrow band that restricts how much any model can extract from that field.
+These are small unsecured consumer loans. Amounts run from \$500 to the platform ceiling of \$35{,}000, median \$10{,}000 and mean \$12{,}481, with a median monthly instalment of \$342. Interest rates span 5.3\% to 29.0\%, mean near 12\%. Borrowers report a median income of \$60{,}000, a median debt-to-income ratio of 17\% and a median 15 years of credit history. Purposes are dominated by refinancing (56.6\% debt consolidation, 24.2\% credit card); housing splits 46.4\% mortgage, 43.4\% renting, 10.2\% ownership. Grades concentrate in the middle of the platform's scale (A 23.0\%, B 34.1\%, C 26.2\%, D 12.3\%, E--G 4.3\%). Lending Club's own acceptance policy is visible in the scores: the minimum FICO is 612 and the median only 692, a narrow band that limits what any model can extract from that field.
 
-\textbf{Feature selection and leakage.} Of the 151 raw columns, an explicit whitelist retains 23 origination-time fields, listed with representative discarded columns in Table~\ref{tab:features}. The distinction is temporal, not statistical: a retained field is one the lender knew when the loan was issued, whereas a discarded one records what happened afterwards. Post-origination fields are not merely unhelpful, they are fatal, since a column such as \texttt{total\_rec\_prncp} equals the loan amount for every repaid loan and therefore encodes the target directly.
+\textbf{Features and leakage.} The whitelist retains 23 origination-time fields: loan terms (\texttt{loan\_amnt}, \texttt{term}, \texttt{int\_rate}, \texttt{installment}, \texttt{grade}, \texttt{sub\_grade}); applicant profile (\texttt{emp\_length}, \texttt{annual\_inc}, \texttt{home\_ownership}, \texttt{dti}, \texttt{purpose}, \texttt{verification\_status}, \texttt{application\_type}); and the bureau snapshot (\texttt{fico\_range\_low/high}, \texttt{earliest\_cr\_line}, \texttt{delinq\_2yrs}, \texttt{inq\_last\_6mths}, \texttt{open\_acc}, \texttt{pub\_rec}, \texttt{revol\_bal}, \texttt{revol\_util}, \texttt{total\_acc}, \texttt{mort\_acc}, \texttt{pub\_rec\_bankruptcies}). Two engineered fields, the FICO band midpoint and credit-history length, bring the modelling set to 17 numeric and 6 categorical features, of which the IV screen retains 11.
 
-\begin{table}[t]
-\centering
-\caption{Feature selection from the 151 raw columns. Left: the origination-time whitelist actually used, with the 11 features surviving the scorecard's IV screen marked $\star$. Right: representative discarded columns and the reason.}
-\label{tab:features}
-\small
-\begin{tabular}{@{}p{3.6cm}p{4.2cm}@{}}
-\toprule
-\textbf{Retained (23)} & \textbf{Discarded (128), examples} \\
-\midrule
-\emph{Loan terms}\newline
-\texttt{loan\_amnt}, \texttt{term},\newline
-$\star$\texttt{int\_rate}, \texttt{installment},\newline
-$\star$\texttt{grade}, $\star$\texttt{sub\_grade}
-&
-\emph{Post-origination (leakage)}\newline
-\texttt{total\_pymnt}, \texttt{total\_rec\_prncp}, \texttt{recoveries}, \texttt{collection\_recovery\_fee}, \texttt{last\_pymnt\_amnt}, \texttt{last\_fico\_range\_high} \\[2pt]
-\emph{Applicant profile}\newline
-\texttt{emp\_length}, $\star$\texttt{annual\_inc},\newline
-$\star$\texttt{home\_ownership}, $\star$\texttt{dti},\newline
-$\star$\texttt{purpose}, \texttt{verification\_status}, \texttt{application\_type}
-&
-\emph{Identifiers}\newline
-\texttt{id}, \texttt{member\_id}, \texttt{url} \\[2pt]
-\emph{Credit bureau}\newline
-$\star$\texttt{fico\_range\_low/high},\newline
-\texttt{earliest\_cr\_line}, \texttt{delinq\_2yrs}, $\star$\texttt{inq\_last\_6mths}, \texttt{open\_acc}, \texttt{pub\_rec}, \texttt{revol\_bal}, $\star$\texttt{revol\_util}, \texttt{total\_acc}, $\star$\texttt{mort\_acc}, \texttt{pub\_rec\_bankruptcies}
-&
-\emph{Free text and\newline mostly empty}\newline
-\texttt{emp\_title}, \texttt{desc}, \texttt{title}, joint-application and hardship fields \\
-\bottomrule
-\end{tabular}
-\end{table}
+The 128 discarded columns are dominated by post-origination fields that exist only after money has moved: \texttt{total\_pymnt}, \texttt{total\_rec\_prncp}, \texttt{recoveries}, \texttt{collection\_recovery\_fee}, \texttt{last\_pymnt\_amnt} and \texttt{last\_fico\_range\_high} are representative. The criterion is temporal, not statistical, and the danger is not subtle: \texttt{total\_rec\_prncp} equals the loan amount for every repaid loan and therefore encodes the target outright. The remainder are identifiers (\texttt{id}, \texttt{member\_id}, \texttt{url}), free text (\texttt{emp\_title}, \texttt{desc}) and fields that are almost entirely empty.
 
-After the whitelist and the resolved-outcome filter, the vintage split gives: train 175{,}426 loans issued 2007--2013 (default rate 12.6\%), validation 162{,}570 loans issued 2014 (13.7\%), test 283{,}026 loans issued 2015 (14.9\%). The steadily rising default rate across vintages is itself part of the experiment: it is exactly the drift a deployed model faces. Two engineered fields (the FICO band midpoint and credit-history length in years) bring the modelling set to 17 numeric and 6 categorical features; the scorecard's IV screen retains 11 of them, led by \texttt{sub\_grade}, \texttt{int\_rate}, \texttt{grade} and \texttt{fico}. The robustness dataset is the UCI Taiwan credit-card default set \cite{yeh2009}: 30{,}000 clients, 23 features, stratified 60/20/20 split (it has no origination dates).
-
-\textbf{Environment.} Windows~11, CPU only; Python 3.13 with \texttt{scikit-learn}~1.9, \texttt{xgboost}~3.3, \texttt{lightgbm}~4.6, \texttt{pandas}~3.0. All seeds fixed; the full study executes in about 18 minutes.
+\textbf{Split and environment.} Train: 175{,}426 loans issued 2007--2013 (12.6\% default). Validation: 162{,}570 issued 2014 (13.7\%). Test: 283{,}026 issued 2015 (14.9\%). The rising default rate is itself part of the experiment, being exactly the drift a deployed model faces. Robustness uses the UCI Taiwan credit-card set \cite{yeh2009}, 30{,}000 clients with a stratified 60/20/20 split. Windows~11, CPU only, Python 3.13; all seeds fixed; the full study runs in about 18 minutes.
 
 \subsection{Results}
 
-Table~\ref{tab:leaderboard} reports the test-vintage leaderboard: discrimination (AUC, KS) and calibration (Brier, ECE) for every model, raw and after isotonic recalibration; ML entries are mean~$\pm$~std over five seeds. Platt scaling performs on par with isotonic on every model and is omitted for space (the full grid is in the repository). Figure~\ref{fig:reliability} shows reliability diagrams before and after isotonic recalibration; every raw curve lies above the diagonal. Figure~\ref{fig:score} shows the scorecard's score distributions for repaid versus charged-off loans, the classic KS picture. Figure~\ref{fig:profit} traces each model's realized profit per 1{,}000 applicants across PD cutoffs, and Table~\ref{tab:profit} lists the best operating points. Table~\ref{tab:significance} reports significance tests of each challenger against the scorecard. Table~\ref{tab:taiwan} gives the robustness leaderboard on the Taiwan dataset, where XGBoost leads the scorecard by 1.50 AUC points (DeLong $p = 2.8\times10^{-6}$). Figure~\ref{fig:importance} compares XGBoost's gain-based feature importance with the scorecard's information values; the rank correlation between the two is $\rho = 0.56$.
-
 \begin{table}[t]
 \centering
-\caption{Out-of-time leaderboard, Lending Club 2015 test vintage (283{,}026 loans). ML models: mean over five seeds (AUC std $\le 0.006$). Best value per column in bold.}
+\caption{Test vintage (283{,}026 loans issued 2015). AUC and KS on raw scores, Brier and ECE after isotonic recalibration, with raw ECE for comparison; ML entries are means over five seeds (AUC std $\le0.006$). $\Delta$AUC is against the scorecard, with the DeLong $p$-value.}
 \label{tab:leaderboard}
-\small
-\begin{tabular}{llrrrr}
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lrrrrr}
 \toprule
-Calib. & Model & AUC & KS & Brier & ECE \\
+Model & AUC & KS & Brier & ECE & $\Delta$AUC \\
+      &     &    & (iso) & raw / iso & (DeLong) \\
 \midrule
-Raw & Scorecard & 0.6767 & 0.2570 & 0.1213 & 0.0246 \\
-    & XGBoost   & \textbf{0.6850} & \textbf{0.2701} & 0.1212 & 0.0338 \\
-    & LightGBM  & 0.6843 & 0.2693 & 0.1213 & 0.0344 \\
-    & MLP       & 0.6716 & 0.2542 & 0.1218 & 0.0275 \\
-\midrule
-Isotonic & Scorecard & 0.6766 & 0.2564 & 0.1209 & 0.0175 \\
-         & XGBoost   & 0.6848 & 0.2699 & \textbf{0.1203} & 0.0214 \\
-         & LightGBM  & 0.6841 & 0.2688 & 0.1204 & 0.0218 \\
-         & MLP       & 0.6714 & 0.2537 & 0.1212 & \textbf{0.0172} \\
+Scorecard & 0.6767 & 0.2570 & 0.1209 & .025/.0175 & --- \\
+XGBoost & \textbf{0.6850} & \textbf{0.2701} & \textbf{0.1203} & .034/.0214 & $+.0085^{***}$ \\
+LightGBM & 0.6843 & 0.2693 & 0.1204 & .034/.0218 & $+.0072^{***}$ \\
+MLP & 0.6716 & 0.2542 & 0.1212 & .028/\textbf{.0172} & $-.0017^{*}$ \\
 \bottomrule
+\multicolumn{6}{@{}l@{}}{\footnotesize $^{***}p<10^{-48}$\quad $^{*}p=0.024$}
 \end{tabular}
 \end{table}
 
-\begin{table}[t]
+Table~\ref{tab:leaderboard} reports the test vintage. XGBoost leads the scorecard by 0.85 AUC points and LightGBM by 0.72, both overwhelmingly significant because 283{,}026 test loans give enormous power; the MLP is significantly \emph{worse}. Isotonic and Platt recalibration performed alike, so only isotonic is shown.
+
+Calibration tells a different story. Figure~\ref{fig:reliability} shows every raw curve lying above the diagonal: the 2015 vintage defaulted more than the training years, so all models under-predict PD. Raw tree outputs are the worst offenders (ECE 0.034 against the scorecard's 0.025), as expected for margin-maximizing ensembles \cite{guo2017}. Isotonic recalibration removes most of the bias but cannot anticipate drift not yet visible in 2014, and neither tree ensemble matches the scorecard afterwards (0.0214 and 0.0218 against 0.0175); the trees keep the better Brier score because Brier also rewards ranking.
+
+\begin{figure}[t]
 \centering
-\caption{Challengers versus the scorecard on the shared test set. $\Delta$AUC on raw scores with DeLong $p$ and bootstrap 95\% CI; $\Delta$Brier ($\times 10^{3}$, negative favours the challenger) after isotonic recalibration of both models.}
-\label{tab:significance}
-\small
-\begin{tabular}{lrrr}
-\toprule
-Model & $\Delta$AUC [95\% CI] & DeLong $p$ & $\Delta$Brier$_{\text{iso}}$ \\
-\midrule
-XGBoost  & $+0.0085$ [0.0075, 0.0096] & $<10^{-54}$ & $[-0.71, -0.53]$ \\
-LightGBM & $+0.0072$ [0.0062, 0.0082] & $<10^{-48}$ & $[-0.60, -0.43]$ \\
-MLP      & $-0.0017$ [$-0.0031$, $-0.0002$] & $0.024$ & $[+0.02, +0.24]$ \\
-\bottomrule
-\end{tabular}
-\end{table}
+\includegraphics[width=\columnwidth]{fig_reliability_col.png}
+\caption{Reliability on the test vintage, ten equal-frequency bins, raw (grey) versus isotonic (colour). Every raw curve sits above the diagonal because the test vintage defaulted more than the training years.}
+\label{fig:reliability}
+\end{figure}
 
 \begin{table}[t]
 \centering
-\caption{Best operating points on the profit curves (isotonic-calibrated PDs). Profit in USD per 1{,}000 applicants; $\Delta$ is the gain over accepting everyone.}
+\caption{Best operating points on the profit curves, isotonic-calibrated PDs. Profit in USD per 1{,}000 applicants.}
 \label{tab:profit}
 \small
-\begin{tabular}{lrrrr}
-\toprule
-Model & Cutoff & Accept & Profit & $\Delta$ \\
-\midrule
-Accept all & 1.00 & 100.0\% & 705{,}171 & -- \\
-Scorecard  & 0.24 & 93.3\%  & 713{,}772 & $+8{,}602$ \\
-MLP        & 0.25 & 94.0\%  & 714{,}401 & $+9{,}230$ \\
-LightGBM   & 0.25 & 93.7\%  & 725{,}927 & $+20{,}756$ \\
-XGBoost    & 0.23 & 90.7\%  & \textbf{728{,}517} & $+\textbf{23{,}346}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{table}[t]
-\centering
-\caption{Robustness leaderboard, UCI Taiwan credit-card default (6{,}000 test clients, stratified split). AUC on raw scores; Brier and ECE after isotonic recalibration.}
-\label{tab:taiwan}
-\small
 \begin{tabular}{lrrr}
 \toprule
-Model & AUC & Brier$_{\text{iso}}$ & ECE$_{\text{iso}}$ \\
+Model & Cutoff & Accept & Profit \\
 \midrule
-Scorecard & 0.7717 & 0.1363 & \textbf{0.0127} \\
-XGBoost   & \textbf{0.7880} & \textbf{0.1330} & 0.0162 \\
-LightGBM  & 0.7859 & 0.1334 & 0.0160 \\
-MLP       & 0.7662 & 0.1362 & 0.0171 \\
+Accept all & 1.00 & 100.0\% & 705{,}171 \\
+Scorecard & 0.24 & 93.3\% & 713{,}772 \\
+MLP & 0.25 & 94.0\% & 714{,}401 \\
+LightGBM & 0.25 & 93.7\% & 725{,}927 \\
+XGBoost & 0.23 & 90.7\% & \textbf{728{,}517} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=\textwidth]{fig_reliability.png}
-\caption{Reliability diagrams on the 2015 test vintage (10 equal-frequency bins), raw (grey) versus isotonic-recalibrated (colour) predictions, per model. Every raw curve lies above the diagonal: the 2015 vintage defaulted more than the training vintages, so all models under-predict PD. Isotonic recalibration on the 2014 vintage removes most, but not all, of the bias.}
-\label{fig:reliability}
-\end{figure*}
+Profit concentrates the AUC gap at the cutoff (Fig.~\ref{fig:profit}, Table~\ref{tab:profit}). Accepting everyone already earns \$705 per applicant because interest income dominates this portfolio, so a PD model adds value only by pruning the riskiest tail. The scorecard's best policy rejects 6.7\% of applicants for a 1.2\% gain; XGBoost rejects 9.3\% for 3.3\%, worth about \$14{,}700 per 1{,}000 applicants over the scorecard, or 2.1\%. On the Taiwan data the ranking reproduces: XGBoost leads the scorecard by 1.50 AUC points ($p=2.8\times10^{-6}$) and the MLP again falls below it.
 
-\begin{figure}[!t]
+\begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{fig_score_dist.png}
-\caption{Scorecard score distributions on the test vintage for repaid versus charged-off loans. The separation between the two distributions is the KS statistic (0.257).}
-\label{fig:score}
-\end{figure}
-
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=\textwidth]{fig_profit.png}
-\caption{Realized profit per 1{,}000 applicants versus PD acceptance cutoff, per model (isotonic-calibrated PDs), with best operating points marked and the accept-everyone benchmark dashed. Left: full sweep. Right: zoom on the peak region, where the boosted trees separate from the scorecard and MLP.}
+\includegraphics[width=\columnwidth]{fig_profit_col.png}
+\caption{Realized profit per 1{,}000 applicants against PD cutoff, with best operating points marked and the accept-everyone benchmark dashed. Right: the peak region, where the boosted trees separate.}
 \label{fig:profit}
-\end{figure*}
-
-\begin{figure}[!t]
-\centering
-\includegraphics[width=\columnwidth]{fig_importance.png}
-\caption{What the two model families consider informative: XGBoost total-gain share (left) versus scorecard information value (right), top 12 features by XGBoost gain. Both agree that the platform's own risk pricing (\texttt{int\_rate}, \texttt{grade}) dominates; they disagree on \texttt{sub\_grade} versus \texttt{int\_rate}, which carry nearly the same information in different encodings, and on \texttt{annual\_inc}.}
-\label{fig:importance}
 \end{figure}
 
-\subsection{Ablation: Removing the Platform's Own Pricing}
+\subsection{Ablation: Withholding the Platform's Pricing}
 
-Figure~\ref{fig:importance} shows every model leaning heavily on \texttt{int\_rate}, \texttt{grade} and \texttt{sub\_grade}, which together supply 35.8\% of XGBoost's total gain and 42.5\% of LightGBM's, and which are the scorecard's three highest information values. These are not three independent measurements: within a single sub-grade the interest rate varies with a standard deviation of only 0.33 percentage points against an overall spread of 3.69, so they are one variable in three notations, namely Lending Club's own risk assessment.
+\texttt{grade}, \texttt{sub\_grade} and \texttt{int\_rate} supply 35.8\% of XGBoost's total gain and 42.5\% of LightGBM's, and are the scorecard's three highest information values. They are not three measurements but one, namely Lending Club's own risk assessment: within a sub-grade the rate varies with a standard deviation of 0.33 percentage points against an overall spread of 3.69. They are legitimate inputs, published before a loan is funded and genuinely observed by an investor, so they are not leakage. They do narrow the question, from whether ML assesses credit risk better than a scorecard to whether it re-ranks a population the platform has already ranked. The protocol was therefore rerun without them, in two variants:
 
-They are legitimate inputs, since the platform publishes them before a loan is funded and an investor genuinely observes them, so they are not leakage under the definition used here. They do, however, narrow the question the main experiment answers, from ``can machine learning assess credit risk better than a scorecard'' to ``can it re-rank a population the platform has already ranked''. To separate the two, the entire protocol was rerun without them, in two variants that differ in one subtle respect:
-
-\begin{itemize}\itemsep2pt
-  \item \textbf{Variant A} drops \texttt{grade}, \texttt{sub\_grade} and \texttt{int\_rate}, leaving 20 features.
-  \item \textbf{Variant B} additionally drops \texttt{installment}, leaving 19.
+\begin{itemize}\itemsep1pt \parskip0pt \topsep2pt
+\item \textbf{Variant A} drops \texttt{grade}, \texttt{sub\_grade}, \texttt{int\_rate}, leaving 20 features.
+\item \textbf{Variant B} additionally drops \texttt{installment}, leaving 19.
 \end{itemize}
 
-Variant B exists because the monthly instalment is a deterministic function of the loan amount, the term and the rate. With the term fixed at 36 months, the instalment per dollar borrowed correlates with the interest rate at $\rho = 0.998$, so under Variant A the pricing information remains available to any model willing to use that proxy. Variant B is therefore the honest ablation, and Variant A measures how much a model exploits the proxy.
+Variant B exists because the instalment is a deterministic function of amount, term and rate; with the term fixed at 36 months the instalment per dollar borrowed correlates with the rate at $\rho=0.998$, so under Variant~A pricing remains available through that proxy. Variant~B is the honest ablation and Variant~A measures how far each model exploits the proxy.
 
 \begin{table}[t]
 \centering
-\caption{Ablation. Test-vintage AUC (mean over five seeds) when the platform's pricing is withheld. Variant~A drops \texttt{grade}, \texttt{sub\_grade}, \texttt{int\_rate}; Variant~B also drops \texttt{installment}, a 0.998-correlated proxy for the rate. The final column is the change from baseline to Variant~B.}
+\caption{Ablation. Test-vintage AUC, mean over five seeds, when the platform's pricing is withheld.}
 \label{tab:ablation}
 \small
 \begin{tabular}{lrrrr}
 \toprule
 Model & Baseline & Var.~A & Var.~B & $\Delta$B \\
 \midrule
-XGBoost   & 0.6850 & 0.6678 & \textbf{0.6637} & $-0.0214$ \\
-LightGBM  & 0.6843 & 0.6664 & 0.6622 & $-0.0220$ \\
-MLP       & 0.6716 & 0.6488 & 0.6428 & $-0.0289$ \\
+XGBoost & 0.6850 & 0.6678 & \textbf{0.6637} & $-0.0214$ \\
+LightGBM & 0.6843 & 0.6664 & 0.6622 & $-0.0220$ \\
+MLP & 0.6716 & 0.6488 & 0.6428 & $-0.0289$ \\
 Scorecard & 0.6767 & 0.6397 & 0.6397 & $\mathbf{-0.0371}$ \\
 \midrule
-\multicolumn{5}{@{}l}{\emph{XGBoost's lead over the scorecard}} \\
+\multicolumn{5}{@{}l}{\emph{XGBoost's lead over the scorecard}}\\
 AUC points & $+0.83$ & $+2.80$ & $+2.39$ & \\
-Profit/1{,}000 & \$14{,}744 & \$17{,}068 & \$15{,}404 & \\
+Profit/1k & \$14{,}744 & \$17{,}068 & \$15{,}404 & \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:ablation} reports the outcome, and three findings stand out.
+Table~\ref{tab:ablation} gives the outcome. \textbf{The pricing features were suppressing the ML advantage, not creating it.} Every model degrades, but unequally: the scorecard loses 3.71 AUC points against the trees' 2.15, so XGBoost's lead grows from $+0.83$ to $+2.39$ points under Variant~B, with DeLong $p$ underflowing to zero and a bootstrap interval of $[+0.0222,+0.0255]$; its profit advantage widens to \$15{,}404 per 1{,}000. The modest margin in the main result is thus a property of the enriched information set: once models must build a risk ordering from bureau data alone, the interaction structure that trees capture and an additive scorecard cannot becomes materially more valuable.
 
-\textbf{The pricing features were suppressing the ML advantage, not creating it.} Every model degrades once they are withheld, but not equally: the scorecard loses 3.71 AUC points while the tree ensembles lose only about 2.15. XGBoost's lead therefore grows from $+0.83$ to $+2.39$ points under Variant~B, close to a tripling, with DeLong $p$ underflowing to zero and a bootstrap interval of $[+0.0222, +0.0255]$. Its profit advantage widens in step, from \$14{,}744 to \$15{,}404 per 1{,}000 applicants. The modest margin reported in the main study is thus a property of the enriched information set rather than of the model families: once the models must build a risk ordering from bureau data alone, the interaction structure that trees capture and an additive scorecard cannot becomes materially more valuable.
-
-\textbf{The trees used the instalment proxy and the scorecard did not.} The scorecard scores 0.6397 under both variants, identical to four decimals, because \texttt{installment} has an information value of 0.0023 and had already been eliminated by the IV screen. Both tree ensembles, by contrast, lose a further 0.4 AUC points when it is removed, having recovered part of the withheld interest rate through it. The univariate screen that appears to be the scorecard's most old-fashioned step is precisely what protected it from a proxy the more flexible models consumed without complaint.
-
-\textbf{The MLP remains unreliable rather than merely weaker.} Under Variant~B it edges the scorecard, by $+0.0031$ AUC on the five-seed mean and $+0.0079$ on the reference seed used for significance testing, but it stays roughly 2 points below both tree ensembles. Under Variant~A the two views disagree in sign, the five-seed mean placing it above the scorecard and the reference seed below, a discrepancy explained by its seed standard deviation of $0.0056$, an order of magnitude larger than the trees'. No comparable ambiguity arises for the boosted ensembles, whose seed spread is far too small to reverse a 2-point gap.
+\textbf{The trees used the instalment proxy and the scorecard did not.} The scorecard scores 0.6397 under both variants, identical to four decimals, because \texttt{installment} has an information value of 0.0023 and had already been eliminated by the IV screen; both tree ensembles lose a further 0.4 points when it is removed. The univariate screen that looks like the scorecard's most old-fashioned step is what protected it from a proxy the flexible models consumed without complaint. The MLP remains unreliable rather than merely weaker: its seed standard deviation of 0.0056 is an order of magnitude larger than the trees', large enough that under Variant~A its five-seed mean and its reference seed disagree about whether it beats the scorecard.
 
 % ------------------------------------------------------------------ 5
 \section{Discussion}
 
-\textbf{The ML advantage is real, but it belongs to the trees.} The boosted ensembles beat the scorecard decisively in statistical terms (Table~\ref{tab:significance}): the DeLong $p$-values are astronomically small because 283{,}026 test loans give enormous power. Yet the economic size of the gap, $+0.85$ AUC points for XGBoost, is an order of magnitude smaller than the $+8$ to $+15$ point gaps sometimes quoted from random-split studies, and the MLP actually loses to the scorecard, echoing the conclusion of \cite{gunnarsson2021} that deep learning does not pay on tabular credit data. Two mechanisms compress the gap. First, the information set is already heavily distilled: \texttt{int\_rate}, \texttt{grade} and \texttt{sub\_grade} encode Lending Club's own underwriting model, so all four models largely re-rank applicants the platform has already risk-ranked (Fig.~\ref{fig:importance}); the residual nonlinear signal available to the trees is limited, a claim the ablation of Section~4.3 converts from conjecture into measurement. Second, the out-of-time protocol denies the flexible models the flattery of a random split, in which train and test share the same macroeconomic regime.
+\textbf{The advantage is real but belongs to the trees.} The DeLong $p$-values are astronomically small because of test-set size, yet the economic gap of 0.85 AUC points is an order of magnitude smaller than the 8 to 15 points sometimes quoted from random-split studies, and the MLP loses outright, echoing \cite{gunnarsson2021} on deep learning for tabular credit data. Two mechanisms compress it: the information set already embeds Lending Club's underwriting, which Section~4.3 quantifies; and the out-of-time protocol denies flexible models the flattery of a random split in which train and test share one macroeconomic regime.
 
-\textbf{Calibration is a separate axis, and the scorecard wins it.} Raw tree outputs are visibly miscalibrated (ECE 0.034 versus the scorecard's 0.025, Table~\ref{tab:leaderboard}), as expected for margin-maximizing ensembles \cite{guo2017}; the logistic scorecard is a probability model by construction. Isotonic recalibration narrows but does not erase this: the recalibrated scorecard still has the lower ECE (0.0175 versus 0.0214). Meanwhile the recalibrated trees keep their Brier advantage because Brier rewards discrimination as well as calibration. The reliability diagrams (Fig.~\ref{fig:reliability}) expose the deeper issue: all raw curves sit above the diagonal because the 2015 vintage defaulted more (14.9\%) than the training vintages (12.6\%). Recalibrating on 2014 corrects only the part of the drift already visible in 2014. No within-model fix can anticipate a level shift that has not happened yet; this is why regulators require ongoing monitoring rather than one-time calibration.
+\textbf{Calibration is a separate axis, and the scorecard holds it.} Raw tree outputs are visibly miscalibrated while the logistic scorecard is a probability model by construction, and identical recalibration narrows but does not erase the difference. The reliability diagrams expose the deeper issue: all raw curves sit above the diagonal because the test vintage defaulted more than the training years, and a calibrator fitted on 2014 corrects only the drift already visible in 2014. No within-model fix can anticipate a level shift that has not happened yet, which is why regulators require ongoing monitoring rather than one-time calibration.
 
-\textbf{Profit concentrates the AUC gap at the cutoff.} Accepting everyone is already profitable ($705$ USD per applicant, Table~\ref{tab:profit}) because interest income dominates in this portfolio; a PD model adds value only by pruning the riskiest tail. The scorecard's best policy rejects 6.7\% of applicants for a $+1.2\%$ profit gain, while XGBoost rejects 9.3\% for $+3.3\%$; switching from scorecard to XGBoost is worth about 14{,}700 USD per 1{,}000 applicants (2.1\%). The whole battle is fought in the zoomed panel of Fig.~\ref{fig:profit}: everywhere else the models are interchangeable. This is the study's most practical observation: a 0.85-point AUC edge, statistically overwhelming, converts into a modest but genuine economic edge whose value scales linearly with volume, which is why large lenders adopt gradient boosting and small ones often rationally do not.
+\textbf{Profit concentrates the gap at the cutoff.} Accepting everyone is already profitable, so the model adds value only by pruning the riskiest tail; switching from scorecard to XGBoost is worth 2.1\%, an edge whose value scales linearly with volume, which is why large lenders adopt gradient boosting and small ones often rationally do not. The scorecard's WoE pipeline cost discrimination but bought near-calibration and full point-by-point readability, an attractive bargain under model-governance constraints.
 
-\textbf{Trade-offs observed.} The scorecard's WoE pipeline cost discrimination but bought near-calibration for free and full point-by-point readability, an attractive bargain under model-governance constraints. Isotonic versus Platt was immaterial here (both monotone maps preserve AUC and land within $10^{-3}$ Brier of each other), so the operational choice can be made on simplicity. Five-seed variance was negligible for the trees ($\pm 0.0005$ AUC) but ten times larger for the MLP, another hidden cost of the neural option.
-
-\textbf{Limitations.} (i)~The data contain only \emph{accepted} loans, so all models inherit Lending Club's selection; correcting for it (reject inference) is a known open problem \cite{hand1997}. (ii)~The profit model is undiscounted, uses a fixed $\mathrm{LGD}=0.65$, and ignores partial recoveries on charged-off loans and prepayment; it prices the accept/reject margin, not portfolio economics. (iii)~The platform's own risk grades were kept as features, which is realistic for an investor on the platform but understates what the challengers could add for a lender building from raw bureau data; Section~4.3 quantifies exactly how much, and the understatement is a factor of roughly three. (iv)~One market and one test vintage; 2015 was benign, and a recession vintage could reorder the calibration findings. (v)~The scorecard used equal-frequency WoE bins without monotonicity constraints or interaction terms; a production scorecard with expert binning would likely close part of the AUC gap.
+\textbf{Limitations.} The data contain only \emph{accepted} loans, so every model inherits Lending Club's selection; reject inference remains an open problem \cite{hand1997}. The profit model is undiscounted with a fixed LGD and ignores partial recoveries and prepayment. One market and one test vintage: 2015 was benign, and a recession vintage could reorder the calibration findings. The scorecard used equal-frequency bins without monotonicity constraints, so a production build with expert binning would likely close part of the remaining gap.
 
 % ------------------------------------------------------------------ 6
 \section{Conclusion and Future Work}
 
-Under a leak-proof out-of-time protocol on 621{,}022 Lending Club loans, gradient-boosted trees beat the industry-standard WoE scorecard on discrimination, on Brier score after identical recalibration, and on realized profit at the optimal accept/reject cutoff; the ranking reproduced on an independent dataset. The answer to the project's question is a qualified \emph{yes}: the ML advantage is statistically unambiguous and survives the calibration and profit criteria the AUC-centric literature usually skips, but it is economically modest ($+2.1\%$ profit), it is delivered only by the boosted trees (the MLP significantly underperformed the scorecard), and neither tree ensemble matched the scorecard's calibration. The margin is also conditional on the information set: withholding Lending Club's own pricing widens XGBoost's lead from 0.83 to 2.39 AUC points, so the headline number understates what machine learning offers a lender underwriting from bureau data directly.
+Under a leak-proof out-of-time protocol on 621{,}022 loans, gradient-boosted trees beat the industry-standard scorecard on discrimination, on Brier score after identical recalibration, and on realized profit, and the ranking reproduced on an independent dataset. The answer is a qualified \emph{yes}: statistically unambiguous, economically modest at 2.1\% profit, delivered only by the boosted trees, and achieved without matching the scorecard's calibration. The margin is also conditional on the information set, nearly tripling once the platform's own pricing is withheld, so the headline figure understates what ML offers a lender underwriting from bureau data directly.
 
-The main learning outcomes were methodological. Leakage control dominated everything: reducing 151 raw columns to an origination-time whitelist was the single highest-leverage step in the project, and any mistake there would have produced impressive, meaningless AUCs. Second, evaluation criteria are not interchangeable: the model ranking changed depending on whether discrimination, calibration or profit was asked, so ``which model is best'' has no answer until the deployment question is fixed. Third, vintage drift is not a nuisance but the phenomenon itself: the 2014-fitted calibrators could not fully correct the 2015 default level, a small, honest demonstration of why PD models are monitored rather than trusted.
-
-Future work: reject inference to de-bias the accepted-only sample; survival models for the \emph{timing} of default rather than its occurrence; discounted cash-flow profit with empirical recoveries; monotonicity-constrained gradient boosting as a regulator-friendly middle ground; a fairness audit of the accept/reject policies; and stress evaluation on a recession vintage (2007--2008 originations).
+The main learning outcomes were methodological. Leakage control was the highest-leverage step in the project, and any mistake there would have produced impressive, meaningless results. Evaluation criteria are not interchangeable: the ranking changed with the question asked, so ``which model is best'' has no answer until the deployment question is fixed. And vintage drift is not a nuisance but the phenomenon itself. Future work: reject inference; survival models for the timing of default; discounted cash flows with empirical recoveries; monotonicity-constrained boosting as a regulator-friendly middle ground; and stress evaluation on a recession vintage.
 
 % ------------------------------------------------------------------ 7
-\section{Artifacts and Demonstrations}
+\section{Artifacts}
 
-\begin{itemize}
-  \item \textbf{Code repository:} \url{https://github.com/iitgF/T8}. Contains the modular \texttt{creditrisk} Python package (configuration, data and leakage filter, WoE engine, scorecard, ML models, calibration, metrics, profit analysis, pipeline) and the run script reproducing every number in this report.
-  \item \textbf{LaTeX source (Overleaf):} \url{https://www.overleaf.com/project/6a524fb2acaf61e8bc3c5a8f}
-  \item \textbf{Video demonstration:} \emph{(placeholder, to be replaced with the final recording)}.
-\end{itemize}
+Code, results and both reports: \url{https://github.com/iitgF/T8}, containing the modular \texttt{creditrisk} package and the run script reproducing every number above. LaTeX source: \url{https://www.overleaf.com/project/6a524fb2acaf61e8bc3c5a8f}.
 
-\vspace{2mm}
+\vspace{1mm}
 \noindent\textit{Attribution note:} AI-assisted tooling (Claude Code) was used for code refactoring, optimization and drafting support. All modelling decisions, verification of results and the final text are the author's responsibility, and all reported numbers were reproduced end-to-end from the committed code.
 
 % ------------------------------------------------------------------ 8
-
+\newpage
 \begin{thebibliography}{9}
 
 \bibitem{basel2006}
