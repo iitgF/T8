@@ -5,6 +5,8 @@ thumbnail); slides 2-11 follow the submission guide's suggested flow. Palette
 matches the template: navy + gold on white.
 """
 
+from pathlib import Path
+
 from pptx import Presentation
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
@@ -18,6 +20,11 @@ LIGHT = RGBColor(0xED, 0xF1, 0xF7)   # pale navy tint for cards
 WHITE = RGBColor(0xFF, 0xFF, 0xFF)
 GREEN = RGBColor(0x1B, 0x7A, 0x4B)
 RED = RGBColor(0xA4, 0x2A, 0x2A)
+
+# Paths are anchored to this script, not the working directory, so the deck
+# rebuilds correctly from anywhere. Report figures live in the project root.
+HERE = Path(__file__).resolve().parent
+FIGURES = HERE.parent / "figures"
 
 SW, SH = Inches(13.333), Inches(7.5)
 
@@ -112,7 +119,7 @@ def notes(s, txt):
 
 # ---------------------------------------------------------------- 1: title
 s = slide()
-s.shapes.add_picture("title_slide.png", 0, 0, SW, SH)
+s.shapes.add_picture(str(HERE / "title_slide.png"), 0, 0, SW, SH)
 notes(s, "Hello, my name is Francois Schmitt, I am a student of the BSc Honours "
          "Data Science and AI Online Degree Programme at IIT Guwahati, and this "
          "is my Trimester 8 term project: Does Machine Learning Beat the Credit "
@@ -320,7 +327,7 @@ notes(s, "First results: XGBoost +0.85 AUC points over the scorecard, LightGBM "
 # ---------------------------------------------------------------- 8: calibration
 s = slide()
 header(s, "Results 2 of 4", "Calibration: Every Raw Model Under-Predicts the Future")
-s.shapes.add_picture("figures/fig_reliability.png", Inches(0.6), Inches(1.85),
+s.shapes.add_picture(str(FIGURES / "fig_reliability.png"), Inches(0.6), Inches(1.85),
                      height=Inches(4.35))
 bullets(s, Inches(6.6), Inches(1.95), Inches(6.1), Inches(4.5), [
     ("Read the diagonal:", "a calibrated model's curve lies on it. Every raw "
@@ -342,7 +349,7 @@ notes(s, "Reliability diagrams: raw curves above the diagonal because of "
 # ---------------------------------------------------------------- 9: profit
 s = slide()
 header(s, "Results 3 of 4", "Profit: the AUC Gap Becomes Money at the Cutoff")
-s.shapes.add_picture("figures/fig_profit.png", Inches(0.6), Inches(1.9),
+s.shapes.add_picture(str(FIGURES / "fig_profit.png"), Inches(0.6), Inches(1.9),
                      width=Inches(8.3))
 bullets(s, Inches(9.3), Inches(2.0), Inches(3.5), Inches(4.4), [
     ("Accepting everyone already earns", "$705 per applicant; interest income "
@@ -360,7 +367,7 @@ notes(s, "Profit curves from actual cash flows. The whole battle happens in the 
 # ---------------------------------------------------------------- 10: interpret
 s = slide()
 header(s, "Results 4 of 4", "What Did the Models Learn? Mostly the Same Thing")
-s.shapes.add_picture("figures/fig_importance.png", Inches(0.6), Inches(1.9),
+s.shapes.add_picture(str(FIGURES / "fig_importance.png"), Inches(0.6), Inches(1.9),
                      height=Inches(4.3))
 bullets(s, Inches(8.6), Inches(2.0), Inches(4.2), Inches(4.4), [
     ("Both families agree", "that the platform's own pricing (interest rate, "
@@ -439,5 +446,5 @@ notes(s, "Wrap up: qualified yes. Recap the three criteria, the learnings, and "
          "future work. Point to the GitHub repo where everything reproduces "
          "with one command. Thank the viewer.")
 
-prs.save("Project_Video_Presentation.pptx")
+prs.save(str(HERE / "Project_Video_Presentation.pptx"))
 print("saved Project_Video_Presentation.pptx with", len(prs.slides.__iter__.__self__._sldIdLst), "slides")
