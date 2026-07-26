@@ -237,31 +237,57 @@ notes(s, "Dataset: public Lending Club loans, and worth a moment on what they "
 # ---------------------------------------------------------------- 5: approach
 s = slide()
 header(s, "Approach and code", "One Pipeline, Four Models, Identical Information")
-box(s, Inches(0.6), Inches(1.8), Inches(6.1), Inches(4.6), fill=LIGHT, round_=True)
-text(s, Inches(0.9), Inches(2.0), Inches(5.5), Inches(0.4),
-     "The creditrisk package", size=17, color=NAVY, bold=True)
-text(s, Inches(0.9), Inches(2.5), Inches(5.5), Inches(3.8), [
-    [("data", {"bold": True, "color": GOLD}), ("  loaders + leakage whitelist + vintage split", {})],
-    [("woe / scorecard", {"bold": True, "color": GOLD}), ("  WoE binning, IV screen, logistic, points scaling", {})],
-    [("models", {"bold": True, "color": GOLD}), ("  XGBoost, LightGBM, MLP on a shared design matrix", {})],
-    [("calibration", {"bold": True, "color": GOLD}), ("  Platt + isotonic, fit on the 2014 vintage", {})],
-    [("metrics", {"bold": True, "color": GOLD}), ("  AUC, KS, Brier, ECE, DeLong test, bootstrap CIs", {})],
-    [("decision", {"bold": True, "color": GOLD}), ("  accept/reject profit sweep over PD cutoffs", {})],
-    [("pipeline", {"bold": True, "color": GOLD}), ("  end-to-end orchestration, 5 seeds per ML model", {})],
-], size=14.5, space_after=9)
-bullets(s, Inches(7.2), Inches(1.9), Inches(5.5), Inches(4.6), [
-    ("The baseline is honest:", "an industry-style weight-of-evidence scorecard, "
-     "not a strawman logistic regression on raw inputs."),
+box(s, Inches(0.6), Inches(1.7), Inches(5.9), Inches(2.95), fill=LIGHT, round_=True)
+text(s, Inches(0.9), Inches(1.85), Inches(5.3), Inches(0.35),
+     "The creditrisk package", size=15.5, color=NAVY, bold=True)
+text(s, Inches(0.9), Inches(2.28), Inches(5.3), Inches(2.3), [
+    [("data", {"bold": True, "color": GOLD}), ("  whitelist + vintage split", {})],
+    [("woe / scorecard", {"bold": True, "color": GOLD}), ("  binning, IV screen, points", {})],
+    [("models", {"bold": True, "color": GOLD}), ("  XGBoost, LightGBM, MLP", {})],
+    [("calibration", {"bold": True, "color": GOLD}), ("  Platt + isotonic on 2014", {})],
+    [("metrics", {"bold": True, "color": GOLD}), ("  AUC, KS, Brier, ECE, DeLong", {})],
+    [("decision", {"bold": True, "color": GOLD}), ("  profit sweep over cutoffs", {})],
+    [("pipeline", {"bold": True, "color": GOLD}), ("  orchestration, 5 seeds each", {})],
+], size=12.5, space_after=5)
+bullets(s, Inches(6.9), Inches(1.8), Inches(5.8), Inches(2.9), [
+    ("The baseline is honest:", "an industry-style WoE scorecard, not a "
+     "strawman logistic regression on raw inputs."),
     ("Same information for everyone:", "all four models see the identical 23 "
-     "origination-time features; preprocessing differences cannot explain gaps."),
-    ("Calibration is separated from fitting:", "every model is recalibrated the "
-     "same way on the validation vintage, mimicking bank practice."),
-    ("Profit uses real cash flows:", "repaid loans earn their actual interest; "
-     "charged-off loans lose 65% of principal."),
-], size=15, space_after=12)
-notes(s, "Walk through the package structure on screen here. Emphasize: honest "
-         "WoE scorecard baseline, shared design matrix, calibration fit only on "
-         "the validation vintage, profit from actual loan cash flows.")
+     "features; preprocessing cannot explain the gaps."),
+    ("Calibration is separated from fitting", "and profit uses real cash flows: "
+     "repaid loans earn their interest, charged-off lose 65% of principal."),
+], size=13.5, space_after=9)
+
+# the whitelist decision, made concrete
+box(s, Inches(0.6), Inches(4.9), Inches(5.9), Inches(2.3), fill=LIGHT, round_=True)
+text(s, Inches(0.9), Inches(5.05), Inches(5.3), Inches(0.35),
+     "Kept: 23 origination-time fields", size=14.5, color=NAVY, bold=True)
+text(s, Inches(0.9), Inches(5.45), Inches(5.3), Inches(1.6), [
+    [("loan_amnt · term · int_rate · installment · grade · sub_grade", {})],
+    [("annual_inc · dti · emp_length · home_ownership · purpose", {})],
+    [("fico · revol_util · inq_last_6mths · delinq_2yrs · open_acc · "
+      "revol_bal · total_acc · mort_acc · pub_rec", {})],
+], size=11.5, color=INK, space_after=5)
+
+box(s, Inches(6.9), Inches(4.9), Inches(5.8), Inches(2.3), fill=LIGHT, round_=True)
+text(s, Inches(7.2), Inches(5.05), Inches(5.2), Inches(0.35),
+     "Discarded: 128 columns", size=14.5, color=RED, bold=True)
+text(s, Inches(7.2), Inches(5.45), Inches(5.2), Inches(1.6), [
+    [("total_pymnt · total_rec_prncp · recoveries · "
+      "collection_recovery_fee · last_pymnt_amnt · last_fico_range_high", {})],
+    [("Known only after the loan was funded. ", {"italic": True}),
+     ("total_rec_prncp", {"bold": True, "color": NAVY}),
+     (" equals the loan amount for every repaid loan: it is the answer, not a "
+      "feature.", {"italic": True})],
+], size=11.5, color=INK, space_after=6)
+notes(s, "Walk through the package on screen here. The design principles: an "
+         "honest scorecard baseline, identical information for all four models, "
+         "calibration separated from fitting, and profit from real cash flows. "
+         "Then the concrete version of the leakage decision: on the left what I "
+         "kept, all knowable on the day of application; on the right what I "
+         "threw away. Point at total_rec_prncp: principal received to date "
+         "equals the loan amount for every repaid loan, so a model using it "
+         "scores near-perfectly and has learned nothing.")
 
 # ---------------------------------------------------------------- 6: metrics
 s = slide()
