@@ -136,13 +136,14 @@ bullets(s, Inches(0.6), Inches(1.75), Inches(6.7), Inches(4.6), [
     ("The status quo:", "banks still use logistic-regression scorecards, a "
      "forty-year-old technology, because they are stable and explainable."),
     ("The ML claim:", "benchmarking papers report boosted trees dominate, but "
-     "they score models almost exclusively by AUC."),
+     "they score models almost exclusively by AUC, the area under the ROC "
+     "curve."),
     ("The question:", "does the ML advantage survive the criteria a lender "
      "actually needs?"),
 ], size=15.5)
 x = Inches(7.7)
 for i, (t1, t2) in enumerate([
-        ("1. Discrimination", "Can the model rank bad borrowers above good ones? (AUC, KS)"),
+        ("1. Discrimination", "Can the model rank bad borrowers above good ones? (area under the ROC curve, AUC; and KS)"),
         ("2. Calibration", "Can the predicted PD be taken at face value? (Brier, ECE, reliability)"),
         ("3. Profit", "Does the model make money at its accept/reject cutoff?")]):
     y = Inches(1.75) + i * Inches(1.55)
@@ -199,7 +200,7 @@ text(s, Inches(0.95), Inches(3.12), Inches(4.0), Inches(0.35),
 for i, (lead, rest) in enumerate([
         ("Size", "$500 to the $35,000 ceiling, median $10,000, $342 a month"),
         ("Price", "5.3% to 29.0%, mean near 12%"),
-        ("Borrower", "median income $60,000, DTI 17%, 15 years of credit history")]):
+        ("Borrower", "median income $60,000, debt-to-income ratio 17%")]):
     y = Inches(3.55) + i * Inches(0.4)
     text(s, Inches(0.95), y, Inches(1.1), Inches(0.35), lead,
          size=12.5, color=GOLD, bold=True)
@@ -213,8 +214,8 @@ for i, (lead, rest) in enumerate([
          size=12.5, color=GOLD, bold=True)
     text(s, Inches(8.05), y, Inches(4.4), Inches(0.35), rest, size=12.5, color=INK)
 text(s, Inches(6.9), Inches(3.12), Inches(5.6), Inches(0.35),
-     [[("FICO floor 612, median 692:  ", {"bold": True, "color": NAVY}),
-       ("a narrow band, by design", {"color": INK})]], size=12.5)
+     [[("FICO credit score:  ", {"bold": True, "color": NAVY}),
+       ("floor 662, median 692, an approval cutoff", {"color": INK})]], size=12.5)
 
 bullets(s, Inches(0.6), Inches(5.15), Inches(12.1), Inches(2.1), [
     ("The leakage filter is the hard work:", "of the 151 raw columns, most are "
@@ -228,9 +229,10 @@ bullets(s, Inches(0.6), Inches(5.15), Inches(12.1), Inches(2.1), [
 notes(s, "Dataset: public Lending Club loans, and worth a moment on what they "
          "actually are. Small unsecured consumer loans, median ten thousand "
          "dollars over three years, mostly people refinancing more expensive "
-         "credit-card debt. Note the FICO floor of 612: Lending Club had "
-         "already screened everyone, which is why that field discriminates so "
-         "weakly and why the achievable AUCs sit near 0.68. Then the two key "
+         "credit-card debt. Note the FICO floor: from 2009 the minimum score "
+         "in every single vintage is exactly 662, which is an approval cutoff, "
+         "not a coincidence. Nobody genuinely subprime is in this sample, which "
+         "is part of why the achievable AUCs sit near 0.68. Then the two key "
          "decisions: the origination-time whitelist against leakage, and the "
          "out-of-time vintage split.")
 
@@ -294,10 +296,11 @@ s = slide()
 header(s, "Evaluation", "Three Questions, Each With Its Own Metrics")
 for i, (t1, t2) in enumerate([
         ("Discrimination: AUC, KS",
-         "AUC: probability a random defaulter is ranked riskier than a random "
-         "good borrower. KS: maximum distance between the two score "
-         "distributions. Both ignore whether the PD values themselves are "
-         "right."),
+         "AUC, the area under the receiver operating characteristic curve: the "
+         "probability a random defaulter is ranked riskier than a random good "
+         "borrower. KS, Kolmogorov-Smirnov: the maximum distance between the "
+         "two score distributions. Both ignore whether the PD values "
+         "themselves are right."),
         ("Calibration: Brier, ECE, reliability",
          "Among loans assigned PD near q, do a fraction q actually default? "
          "Brier: mean squared error of the probability. ECE: average gap "
