@@ -190,23 +190,49 @@ stats = [
     ("30,000", "UCI Taiwan clients (robustness)", 40),
 ]
 for i, (v, l, sz) in enumerate(stats):
-    stat(s, Inches(0.5) + i * Inches(3.15), Inches(1.8), Inches(3.0), v, l, size=sz)
-bullets(s, Inches(0.6), Inches(3.6), Inches(12.0), Inches(3.3), [
-    ("Source:", "public Lending Club export (Kaggle); 36-month loans only, so "
-     "every loan matures before the data ends and no outcome is censored."),
-    ("Target:", "charged-off vs fully paid; loans still in flight are excluded."),
-    ("The leakage filter is the hard work:", "the raw export has 151 columns, "
-     "most of them post-origination servicing fields (payments received, "
-     "recoveries, hardship flags) that trivially predict the outcome. I kept an "
-     "explicit whitelist of 23 origination-time fields."),
-    ("Out-of-time split:", "train on 2007-2013 vintages, calibrate on 2014, "
-     "test on 2015, exactly how a deployed model meets the future. The rising "
-     "default rate across vintages is the drift a real model faces."),
-], size=15, space_after=9)
-notes(s, "Dataset: public Lending Club loans. Key decisions: 36-month loans so "
-         "outcomes are fully observed; a strict origination-time whitelist "
-         "against leakage; and an out-of-time vintage split rather than a "
-         "random split. Robustness on the UCI Taiwan dataset.")
+    stat(s, Inches(0.5) + i * Inches(3.15), Inches(1.62), Inches(3.0), v, l, size=sz)
+
+# what the loans actually are
+box(s, Inches(0.6), Inches(2.95), Inches(12.1), Inches(1.95), fill=LIGHT, round_=True)
+text(s, Inches(0.95), Inches(3.12), Inches(4.0), Inches(0.35),
+     "Small unsecured consumer loans", size=15.5, color=NAVY, bold=True)
+for i, (lead, rest) in enumerate([
+        ("Size", "$500 to the $35,000 ceiling, median $10,000, $342 a month"),
+        ("Price", "5.3% to 29.0%, mean near 12%"),
+        ("Borrower", "median income $60,000, DTI 17%, 15 years of credit history")]):
+    y = Inches(3.55) + i * Inches(0.4)
+    text(s, Inches(0.95), y, Inches(1.1), Inches(0.35), lead,
+         size=12.5, color=GOLD, bold=True)
+    text(s, Inches(2.1), y, Inches(4.4), Inches(0.35), rest, size=12.5, color=INK)
+for i, (lead, rest) in enumerate([
+        ("Purpose", "57% debt consolidation, 24% credit card: refinancing"),
+        ("Housing", "46% mortgage, 43% renting, 10% owned"),
+        ("Grades", "A to D is 96% of the book; E to G only 4.3%")]):
+    y = Inches(3.55) + i * Inches(0.4)
+    text(s, Inches(6.9), y, Inches(1.1), Inches(0.35), lead,
+         size=12.5, color=GOLD, bold=True)
+    text(s, Inches(8.05), y, Inches(4.4), Inches(0.35), rest, size=12.5, color=INK)
+text(s, Inches(6.9), Inches(3.12), Inches(5.6), Inches(0.35),
+     [[("FICO floor 612, median 692:  ", {"bold": True, "color": NAVY}),
+       ("a narrow band, by design", {"color": INK})]], size=12.5)
+
+bullets(s, Inches(0.6), Inches(5.15), Inches(12.1), Inches(2.1), [
+    ("The leakage filter is the hard work:", "of the 151 raw columns, most are "
+     "post-origination servicing fields (payments received, recoveries, "
+     "hardship flags) that trivially predict the outcome. I kept an explicit "
+     "whitelist of 23 origination-time fields."),
+    ("Out-of-time split:", "train on 2007-2013, calibrate on 2014, test on "
+     "2015, exactly how a deployed model meets the future. The rising default "
+     "rate across vintages is the drift a real model faces."),
+], size=14.5, space_after=9)
+notes(s, "Dataset: public Lending Club loans, and worth a moment on what they "
+         "actually are. Small unsecured consumer loans, median ten thousand "
+         "dollars over three years, mostly people refinancing more expensive "
+         "credit-card debt. Note the FICO floor of 612: Lending Club had "
+         "already screened everyone, which is why that field discriminates so "
+         "weakly and why the achievable AUCs sit near 0.68. Then the two key "
+         "decisions: the origination-time whitelist against leakage, and the "
+         "out-of-time vintage split.")
 
 # ---------------------------------------------------------------- 5: approach
 s = slide()
