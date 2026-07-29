@@ -39,3 +39,6 @@ iitg_bsc_internship_term_project_report_template.pdf
 
 # Screen recordings and video takes (final cut lives on YouTube)
 *.mp4
+
+# Overleaf upload bundle is generated, not source
+report_and_video/overleaf_upload.zip
