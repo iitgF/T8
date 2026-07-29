@@ -1,0 +1,139 @@
+% IITG BSc (Hons) DS&AI Term Project, follow-up note
+% Companion to report.tex: benchmarking against Lending Club's own model.
+% Compile with pdfLaTeX on Overleaf. No figures required.
+\documentclass[a4paper,twocolumn,10pt]{article}
+
+\usepackage[a4paper,top=2.2cm,bottom=2.2cm,left=1.9cm,right=1.9cm,columnsep=0.6cm]{geometry}
+\usepackage{newtxtext,newtxmath}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{xurl}
+\usepackage{titlesec}
+\usepackage[labelfont=bf,labelsep=period,font=small]{caption}
+\usepackage[hidelinks]{hyperref}
+
+\titleformat{\section}{\centering\normalsize\bfseries}{\thesection.}{0.5em}{\MakeUppercase}
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+\begin{document}
+
+\twocolumn[{
+\centering
+{\large\bfseries HOW GOOD IS A HOMEMADE SCORECARD? BENCHMARKING AGAINST LENDING CLUB'S OWN PRODUCTION MODEL\par}
+\vspace{3mm}
+{\itshape François Schmitt (Roll Number: 23035010523)\par}
+\vspace{3mm}
+Term Project Follow-Up Note, Trimester 8\\
+B.Sc.\ (Honours) Data Science and Artificial Intelligence\\
+Indian Institute of Technology Guwahati, India\\
+{\ttfamily f.schmitt@op.iitg.ac.in}\par
+\vspace{6mm}
+}]
+
+\begin{center}\textbf{ABSTRACT}\end{center}
+\noindent
+The main study compares machine-learning models against a weight-of-evidence scorecard built for the purpose, because real bank scorecards are proprietary. That invites a fair objection: the baseline is homemade, so how good is it? This note answers with a benchmark that was available in the data all along. Lending Club's sub-grade is the output of a real production underwriting model, assigned before each loan was listed, and it can be scored on the same test vintage under the same criteria. The result is instructive. The platform's single grade column ranks borrowers \emph{better} than the eleven-feature scorecard built here (AUC 0.6787 against 0.6767, DeLong $p=0.026$), while XGBoost beats the platform's model by 0.69 AUC points. The scorecard is not simply worse, however: it is better calibrated and earns 0.4\% more profit at its optimal cutoff, because ranking is not the only thing a lender consumes. The honest statement of what machine learning adds over a deployed industry model is therefore $+0.69$ AUC points, slightly less than the $+0.85$ measured against the homemade baseline, and considerably more defensible.
+
+\vspace{2mm}
+\noindent\textbf{\textit{Index Terms:}} Credit scoring, benchmarking, probability of default, XGBoost, weight of evidence
+
+\section{Motivation}
+
+The main report builds its scorecard from scratch, following the standard weight-of-evidence construction \cite{siddiqi2006}: quantile binning, information-value screening, logistic regression on the transformed features, and points-to-double-odds scaling. This is deliberate. Production scorecards are trade secrets, and even if one could be obtained it would have been fitted on a different applicant population with different fields, so comparing against it would measure populations rather than methods.
+
+The objection remains reasonable: a baseline the author built himself might simply be a weak one, and the reported machine-learning advantage would then say more about the baseline than about machine learning. What makes the objection answerable here is that the dataset already contains a real production model's output. Lending Club assigns every accepted loan a sub-grade from A1 to G5, published on the platform before the loan is funded, and that grade is the visible output of its proprietary underwriting model. Treating it as a competing model costs nothing and settles the question.
+
+\section{Method}
+
+The platform's grade is evaluated in the same harness as everything else, on the same 283{,}026 loans issued in 2015, with two encodings.
+
+\textbf{As a ranking.} The ordinal sub-grade is used directly as a risk score, from A1 as safest to G5 as riskiest. This requires no fitting whatsoever and yields the area under the receiver operating characteristic curve (AUC) and the Kolmogorov-Smirnov statistic (KS).
+
+\textbf{As a probability.} A grade is not a probability, so each level is mapped to its observed default rate on the training vintages, smoothed toward the portfolio mean with a prior weight of 50 loans to stabilise the sparse high-risk levels. That map is applied to the test vintage and then recalibrated isotonically on the 2014 vintage, exactly as every other model in the study is treated. This yields Brier score, expected calibration error (ECE) and realized profit under the same cash-flow assumptions, namely that a repaid 36-month loan earns $36\cdot\text{instalment}-\text{principal}$ and a charged-off loan loses 65\% of principal.
+
+The study's own models are refitted on the reference seed for a like-for-like single-seed comparison, and AUC differences are tested with DeLong's method for correlated curves \cite{delong1988}.
+
+\section{Results}
+
+\begin{table}[t]
+\centering
+\caption{Test vintage, 283{,}026 loans issued 2015. Platform rows are Lending Club's own model; the rest are this project's, on the reference seed. Brier and ECE after identical isotonic recalibration; profit in USD per 1{,}000 applicants at each model's best cutoff.}
+\label{tab:bench}
+\footnotesize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lrrrr}
+\toprule
+Model & AUC & Brier & ECE & Profit \\
+\midrule
+XGBoost & \textbf{0.6853} & \textbf{0.1203} & 0.0215 & \textbf{728{,}517} \\
+LightGBM & 0.6840 & 0.1204 & 0.0213 & 725{,}927 \\
+\emph{LC sub-grade} & \emph{0.6787} & \emph{0.1209} & \emph{0.0180} & \emph{710{,}938} \\
+\emph{LC interest rate} & \emph{0.6784} & --- & --- & --- \\
+This scorecard & 0.6767 & 0.1209 & 0.0175 & 713{,}772 \\
+MLP & 0.6751 & 0.1211 & \textbf{0.0174} & 714{,}401 \\
+\emph{LC grade} & \emph{0.6675} & \emph{0.1212} & \emph{0.0174} & \emph{711{,}503} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Each model against Lending Club's own sub-grade, DeLong test on the shared test set. Positive means the model ranks better than the platform.}
+\label{tab:sig}
+\footnotesize
+\begin{tabular}{lrr}
+\toprule
+Model & $\Delta$AUC & DeLong $p$ \\
+\midrule
+XGBoost & $+0.0069$ & $<10^{-15}$ \\
+LightGBM & $+0.0056$ & $<10^{-15}$ \\
+This scorecard & $-0.0017$ & $0.026$ \\
+MLP & $-0.0033$ & $7\times10^{-5}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:bench} orders every model by discrimination and Table~\ref{tab:sig} tests each against the platform. Three results stand out.
+
+\textbf{The platform's single column out-ranks the eleven-feature scorecard.} Lending Club's sub-grade reaches an AUC of 0.6787 against the scorecard's 0.6767, a gap that is small but statistically real ($p=0.026$). One ordinal field, requiring no fitting, ranks 2015 borrowers better than a scorecard trained on 175{,}426 loans, which uses that same field as one of its eleven inputs.
+
+The mechanism is visible in the fitted model. The weight-of-evidence binner pools categorical levels holding under 2\% of training rows, which collapses D5 through G5, fifteen of the thirty-five sub-grades, into a single \texttt{OTHER} bin. Roughly 4\% of loans, concentrated in the riskiest tail where discrimination is most valuable, therefore receive one pooled evidence weight instead of a resolved grade. The scorecard then spreads its remaining capacity across ten further features whose fitted coefficients are small: the exported points table shows the score spanning 42 points across sub-grade but only 1.1 points across the interest rate, because near-duplicate predictors share one coefficient between them.
+
+\textbf{Machine learning beats the production model, by less than it beats the homemade one.} XGBoost leads the platform's sub-grade by 0.69 AUC points and LightGBM by 0.56, both overwhelmingly significant. Measured against the homemade scorecard the same models led by 0.85 and 0.72. The more defensible figure for what gradient boosting adds over a deployed industry model is therefore the smaller one, and it remains a genuine gain: the trees find structure in the bureau fields that the platform's own underwriters did not compress into the grade.
+
+\textbf{Ranking is not the whole story, and the scorecard wins the rest.} Despite ranking marginally worse, the scorecard is better calibrated than the platform's grade (ECE 0.0175 against 0.0180) and converts its predictions into more money, 713{,}772 USD per 1{,}000 applicants against 710{,}938, a gain of 0.4\%. The grade was designed to rank and to price, not to estimate a probability, so mapping it to a default rate leaves it slightly less trustworthy per unit of ranking power. This reproduces in miniature the main study's central point: a model can be better on discrimination and worse on the criteria a lender actually consumes.
+
+\section{Implications for the Main Study}
+
+Three conclusions carry back to the main report.
+
+First, the homemade baseline is not a strawman. It lands within 0.2 AUC points of a real production model that had access to information the study does not, and it beats that model on calibration and on profit. The machine-learning advantage reported in the main study is therefore not an artifact of a weak comparator.
+
+Second, the honest headline for what machine learning offers is $+0.69$ AUC points over a deployed model, rather than $+0.85$ over a rebuilt one. The main study's number is not wrong, but it is measured against a baseline the author controls, and this one is not.
+
+Third, the ablation in the main report reads differently in this light. Withholding \texttt{grade}, \texttt{sub\_grade} and \texttt{int\_rate} does not merely remove three correlated columns; it removes a competing model's output that on its own out-ranks the scorecard. That is why every model degraded when they were withheld and why the scorecard, which leaned on them most heavily, degraded the most, from 0.6767 to 0.6397.
+
+\section{Limitations}
+
+The platform's grade is evaluated only on loans Lending Club accepted, which are the ones its model scored acceptably, so its performance here is measured on exactly the population its own cutoff produced. The grade also embeds information the study does not observe, including whatever fields the platform used but did not publish, so this is not a controlled comparison of methods on equal information; it is a comparison against a deployed artifact. Finally, mapping grades to default rates is a modelling choice, and a different smoothing constant would move the calibration and profit figures slightly, though not the ranking results, which require no fitting at all.
+
+\section{Artifacts}
+
+Code and results: \url{https://github.com/iitgF/T8}. This note was produced by \texttt{experiment\_platform\_benchmark.py}, writing \texttt{results/platform\_benchmark.csv} and \texttt{results/platform\_significance.csv}. The points table quoted above is \texttt{results/scorecard\_points.csv}, from \texttt{make\_scorecard\_table.py}. Main report: \texttt{report.tex}.
+
+\vspace{1mm}
+\noindent\textit{Attribution note:} AI-assisted tooling (Claude Code) was used for code refactoring, optimization and drafting support. All modelling decisions, verification of results and the final text are the author's responsibility, and all reported numbers were reproduced end-to-end from the committed code.
+
+\begin{thebibliography}{9}
+\small
+\bibitem{siddiqi2006}
+N.~Siddiqi, \textit{Credit Risk Scorecards: Developing and Implementing Intelligent Credit Scoring}. Hoboken, NJ: Wiley, 2006.
+
+\bibitem{delong1988}
+E.~R. DeLong, D.~M. DeLong, and D.~L. Clarke-Pearson, ``Comparing the areas under two or more correlated receiver operating characteristic curves: a nonparametric approach,'' \textit{Biometrics}, vol.~44, no.~3, pp. 837--845, 1988. \url{https://doi.org/10.2307/2531595}
+
+\bibitem{lessmann2015}
+S.~Lessmann, B.~Baesens, H.-V. Seow, and L.~C. Thomas, ``Benchmarking state-of-the-art classification algorithms for credit scoring: An update of research,'' \textit{European Journal of Operational Research}, vol.~247, no.~1, pp. 124--136, 2015. \url{https://doi.org/10.1016/j.ejor.2015.05.030}
+\end{thebibliography}
+
+\end{document}
