@@ -36,3 +36,6 @@ iitg_bsc_internship_term_project_report_template.pdf
 # Large raw data / samples in the project root (re-downloadable via data/download_lc.py)
 /*.csv
 /*.csv.gz
+
+# Screen recordings and video takes (final cut lives on YouTube)
+*.mp4
